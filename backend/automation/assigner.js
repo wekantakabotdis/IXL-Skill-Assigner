@@ -62,10 +62,9 @@ async function assignSkillFromGradePage(page, skillData, studentName) {
     await page.waitForTimeout(1200);
 
     const checkDropdown = async () => {
+      const hasModal = await page.locator('.suggested-skills-modal').isVisible().catch(() => false);
       const hasText = await page.locator('text="Suggest this skill to"').isVisible().catch(() => false);
-      const hasTooltip = await page.locator('.yui3-tooltip-content').isVisible().catch(() => false);
-      const hasMenu = await page.locator('[role="menu"], [role="listbox"]').isVisible().catch(() => false);
-      return hasText || hasTooltip || hasMenu;
+      return hasModal || hasText;
     };
 
     let dropdownVisible = await checkDropdown();
@@ -91,22 +90,22 @@ async function assignSkillFromGradePage(page, skillData, studentName) {
 
     console.log(`Looking for student "${studentName}" in dropdown...`);
     
-    const dropdownContent = page.locator('.yui3-tooltip-content').first();
+    const dropdownContent = page.locator('.suggested-skills-modal ul.entries').first();
     
     let studentFound = false;
     for (let scrollAttempt = 0; scrollAttempt < 25; scrollAttempt++) {
-      const studentRow = page.locator(`text="${studentName}"`).first();
+      const studentRow = page.locator('li.entry-row').filter({ hasText: studentName }).first();
       
       if (await studentRow.isVisible()) {
-        console.log(`Found "${studentName}", clicking...`);
+        console.log(`Found "${studentName}", clicking star...`);
         
-        const starInRow = studentRow.locator('xpath=ancestor::li').locator('.suggestion-toggle-icon').first();
+        const starInRow = studentRow.locator('.suggestion-toggle-icon').first();
         
         if (await starInRow.count() && await starInRow.isVisible()) {
           console.log(`Clicking star next to student...`);
           await starInRow.click();
         } else {
-          console.log(`Clicking student name...`);
+          console.log(`Star not found, clicking student row...`);
           await studentRow.click();
         }
         
