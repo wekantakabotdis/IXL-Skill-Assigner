@@ -1,17 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
+@layer base {
+  body {
+    margin: 0;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: linear-gradient(135deg, #f5ebe0 0%, #e3d5ca 100%);
+    background-attachment: fixed;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Paper texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background-image: 
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(139, 69, 19, 0.01) 2px,
+        rgba(139, 69, 19, 0.01) 4px
+      );
+    z-index: 1;
+  }
 }
 
-#root {
-  min-height: 100vh;
+@layer components {
+  /* Handwritten accent animations */
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-fadeInUp {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+
+  .animate-slideInRight {
+    animation: slideInRight 0.5s ease-out forwards;
+  }
+
+  .animate-scaleIn {
+    animation: scaleIn 0.4s ease-out forwards;
+  }
+
+  /* Paper card effect */
+  .paper-card {
+    background: linear-gradient(180deg, #fffaf5 0%, #fef7f0 100%);
+    border: 1px solid rgba(139, 69, 19, 0.08);
+    box-shadow: 
+      0 1px 3px rgba(139, 69, 19, 0.05),
+      0 4px 12px rgba(139, 69, 19, 0.03),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    position: relative;
+  }
+
+  .paper-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 1px,
+        rgba(139, 69, 19, 0.01) 1px,
+        rgba(139, 69, 19, 0.01) 2px
+      );
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* Ink-style button */
+  .btn-ink {
+    position: relative;
+    background: linear-gradient(135deg, #6b4423 0%, #8b5a3c 100%);
+    color: #fffaf5;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+      0 2px 8px rgba(107, 68, 35, 0.2),
+      0 4px 16px rgba(107, 68, 35, 0.1);
+  }
+
+  .btn-ink:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5a3519 0%, #7a4a2c 100%);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 4px 12px rgba(107, 68, 35, 0.3),
+      0 8px 24px rgba(107, 68, 35, 0.15);
+  }
+
+  .btn-ink:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 
+      0 1px 4px rgba(107, 68, 35, 0.2),
+      0 2px 8px rgba(107, 68, 35, 0.1);
+  }
+
+  .btn-ink:disabled {
+    background: linear-gradient(135deg, #c9b8a8 0%, #d4c4b4 100%);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  /* Accent underline */
+  .accent-underline {
+    position: relative;
+    display: inline-block;
+  }
+
+  .accent-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #c17c5b 0%, transparent 100%);
+    border-radius: 2px;
+  }
+
+  /* Status dot pulse */
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+  }
+
+  .status-dot {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(139, 69, 19, 0.05);
+    border-radius: 5px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #c17c5b 0%, #a66a50 100%);
+    border-radius: 5px;
+    border: 2px solid rgba(255, 250, 245, 0.3);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #a66a50 0%, #8b5a3c 100%);
+  }
+
+  /* Input focus effects */
+  .input-field {
+    background: #fffaf5;
+    border: 2px solid rgba(139, 69, 19, 0.12);
+    transition: all 0.3s ease;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: #c17c5b;
+    box-shadow: 
+      0 0 0 3px rgba(193, 124, 91, 0.1),
+      0 2px 8px rgba(193, 124, 91, 0.08);
+  }
+
+  /* Notification styles */
+  .notification-enter {
+    animation: slideInRight 0.4s ease-out forwards;
+  }
+
+  /* Badge styles */
+  .badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  .badge-success {
+    background: linear-gradient(135deg, #7d9d7c 0%, #6b8a6a 100%);
+    color: #f5ebe0;
+  }
+
+  .badge-error {
+    background: linear-gradient(135deg, #c17c5b 0%, #a66a50 100%);
+    color: #fffaf5;
+  }
+
+  .badge-info {
+    background: linear-gradient(135deg, #8b7b6b 0%, #75665b 100%);
+    color: #fffaf5;
+  }
+
+  .badge-pending {
+    background: linear-gradient(135deg, #c9b8a8 0%, #b5a594 100%);
+    color: #5a3519;
+  }
 }
+
+/* Stagger animation delays */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }

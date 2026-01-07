@@ -3,15 +3,19 @@ export default function StudentSelector({ students, selectedStudent, onSelect })
   
   return (
     <div className="mb-6">
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Select Student ({students?.length || 0} students)
+      <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+        Select Student
+        <span className="ml-2 font-normal" style={{ color: '#b5a594' }}>
+          ({students?.length || 0} students)
+        </span>
       </label>
       <select
         value={selectedStudent || ''}
         onChange={(e) => onSelect(e.target.value ? parseInt(e.target.value) : null)}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
+        style={{ color: '#5a3519' }}
       >
-        <option value="">Select a student...</option>
+        <option value="">Choose a student...</option>
         {students && students.map((student) => (
           <option key={student.id} value={student.id}>
             {student.name} {student.class_name && `(${student.class_name})`}

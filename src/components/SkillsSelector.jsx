@@ -42,33 +42,40 @@ export default function SkillsSelector({ skills, selectedSkills, onToggle, onSel
 
   return (
     <div className="mb-6">
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Skill Range ({skills.length} skills available)
+      <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+        Skill Range
+        <span className="ml-2 font-normal" style={{ color: '#b5a594' }}>
+          ({skills.length} skills available)
+        </span>
       </label>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex gap-2">
+      <div className="p-5 rounded-xl mb-4" style={{ 
+        background: 'linear-gradient(135deg, rgba(193, 124, 91, 0.08) 0%, rgba(193, 124, 91, 0.04) 100%)',
+        border: '1.5px solid rgba(193, 124, 91, 0.15)'
+      }}>
+        <div className="flex gap-3">
           <input
             type="text"
             placeholder="e.g., A.1-A.5"
             value={rangeInput}
             onChange={(e) => setRangeInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleRangeSelect()}
-            className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="input-field flex-1 px-4 py-3 rounded-xl text-base font-medium transition-all"
+            style={{ color: '#5a3519' }}
           />
           <button
             onClick={handleRangeSelect}
             disabled={skills.length === 0}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400"
+            className="btn-ink px-6 py-3 rounded-xl font-semibold"
           >
             Add Range
           </button>
         </div>
         {rangeError && (
-          <p className="mt-2 text-sm text-red-600">{rangeError}</p>
+          <p className="mt-3 text-sm font-medium" style={{ color: '#c17c5b' }}>{rangeError}</p>
         )}
         {skills.length > 0 && (
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-3 text-xs" style={{ color: '#8b7b6b' }}>
             Categories: {[...new Set(skills.map(s => s.category))]
               .sort((a, b) => {
                 if (a.length !== b.length) return a.length - b.length;
@@ -79,14 +86,20 @@ export default function SkillsSelector({ skills, selectedSkills, onToggle, onSel
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm text-gray-600">
-          Selected: <strong>{selectedSkills.length}</strong> skills
+      <div className="flex items-center justify-between p-4 rounded-xl" style={{
+        background: 'rgba(255, 250, 245, 0.6)',
+        border: '1.5px solid rgba(139, 69, 19, 0.08)'
+      }}>
+        <span className="text-sm" style={{ color: '#8b7b6b' }}>
+          Selected: <strong style={{ color: '#6b4423', fontSize: '1.1em' }}>{selectedSkills.length}</strong> skills
         </span>
         {selectedSkills.length > 0 && (
           <button
             onClick={() => onSelectMultiple([])}
-            className="text-sm text-red-600 hover:text-red-700"
+            className="text-sm font-semibold transition-colors"
+            style={{ color: '#c17c5b' }}
+            onMouseOver={(e) => e.currentTarget.style.color = '#a66a50'}
+            onMouseOut={(e) => e.currentTarget.style.color = '#c17c5b'}
           >
             Clear All
           </button>

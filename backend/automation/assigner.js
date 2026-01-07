@@ -70,20 +70,91 @@ async function assignSkillFromGradePage(page, skillData, studentName) {
     let dropdownVisible = await checkDropdown();
     
     if (!dropdownVisible) {
-      console.log('Dropdown not visible after hover, clicking icon...');
-      await suggestionIcon.click();
+      console.log('Dropdown not visible after hover, retrying hover...');
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(500);
+      
+      await suggestionIcon.hover({ force: true });
       await page.waitForTimeout(1200);
       dropdownVisible = await checkDropdown();
     }
     
     if (!dropdownVisible) {
-      console.log('Still no dropdown, waiting longer...');
-      await page.waitForTimeout(1000);
+      console.log('Still no dropdown, trying JavaScript hover simulation...');
+      await suggestionIcon.evaluate(el => {
+        const event = new MouseEvent('mouseover', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        el.dispatchEvent(event);
+      });
+      await page.waitForTimeout(1200);
       dropdownVisible = await checkDropdown();
     }
     
     if (!dropdownVisible) {
-      throw new Error('Dropdown did not appear after hover and click');
+      throw new Error('Dropdown did not appear after multiple hover attempts. Clicking is disabled to prevent accidental "Select All".');
+    }
+    
+    if (!dropdownVisible) {
+      console.log('Still no dropdown, trying JavaScript hover simulation...');
+      // Last resort: Trigger mouseover event via JS instead of clicking
+      await suggestionIcon.evaluate(el => {
+        const event = new MouseEvent('mouseover', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        el.dispatchEvent(event);
+      });
+      await page.waitForTimeout(1200);
+      dropdownVisible = await checkDropdown();
+    }
+    
+    if (!dropdownVisible) {
+      // CRITICAL: Do NOT click the icon as a fallback, as it toggles "Select All"
+      throw new Error('Dropdown did not appear after multiple hover attempts. Clicking is disabled to prevent accidental "Select All".');
+    }
+    
+    if (!dropdownVisible) {
+      console.log('Still no dropdown, trying JavaScript hover simulation...');
+      // Last resort: Trigger mouseover event via JS instead of clicking
+      await suggestionIcon.evaluate(el => {
+        const event = new MouseEvent('mouseover', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        el.dispatchEvent(event);
+      });
+      await page.waitForTimeout(1200);
+      dropdownVisible = await checkDropdown();
+    }
+    
+    if (!dropdownVisible) {
+      // CRITICAL: Do NOT click the icon as a fallback, as it toggles "Select All"
+      throw new Error('Dropdown did not appear after multiple hover attempts. Clicking is disabled to prevent accidental "Select All".');
+    }
+    
+    if (!dropdownVisible) {
+      console.log('Still no dropdown, trying JavaScript hover simulation...');
+      // Last resort: Trigger mouseover event via JS instead of clicking
+      await suggestionIcon.evaluate(el => {
+        const event = new MouseEvent('mouseover', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        el.dispatchEvent(event);
+      });
+      await page.waitForTimeout(1200);
+      dropdownVisible = await checkDropdown();
+    }
+    
+    if (!dropdownVisible) {
+      // CRITICAL: Do NOT click the icon as a fallback, as it toggles "Select All"
+      throw new Error('Dropdown did not appear after multiple hover attempts. Clicking is disabled to prevent accidental "Select All".');
     }
     
     console.log('Dropdown detected, searching for student...');
