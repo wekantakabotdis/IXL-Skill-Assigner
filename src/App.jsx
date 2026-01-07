@@ -21,6 +21,9 @@ export default function App() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [currentTask, setCurrentTask] = useState(null);
   const [taskStatus, setTaskStatus] = useState(null);
+  const [queueData, setQueueData] = useState({ queue: [], allTasks: [] });
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [notification, setNotification] = useState(null);
 
@@ -28,6 +31,33 @@ export default function App() {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const queue = await api.getQueue();
+        setQueueData(queue);
+      } catch (error) {
+        console.error('Error fetching queue:', error);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadHistory = async () => {
+    try {
+      const historyData = await api.getHistory(null, 50);
+      setHistory(historyData);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadHistory();
+    }
+  }, [isAuthenticated]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -164,56 +194,33 @@ export default function App() {
       return;
     }
 
-    setIsAssigning(true);
-
     try {
       const result = await api.assignSkills(selectedStudent, selectedSkills);
       
       if (result.taskId) {
-        setCurrentTask(result.taskId);
-        pollTaskStatus(result.taskId);
+        showNotification('success', `Task queued! ${selectedSkills.length} skills for assignment.`);
+        setSelectedSkills([]);
+        setSelectedStudent(null);
+        loadHistory();
       } else {
         showNotification('error', 'Failed to start assignment');
-        setIsAssigning(false);
       }
     } catch (error) {
       showNotification('error', 'Assignment error: ' + error.message);
-      setIsAssigning(false);
     }
   };
 
-  const pollTaskStatus = async (taskId) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const status = await api.getAssignmentStatus(taskId);
-        setTaskStatus(status);
+  useEffect(() => {
+    if (queueData.allTasks.some(t => t.status === 'completed')) {
+      loadHistory();
+    }
+  }, [queueData]);
 
-        if (status.status === 'completed') {
-          clearInterval(pollInterval);
-          setIsAssigning(false);
-          showNotification('success', 
-            `Successfully assigned ${status.total} skills!`
-          );
-          setSelectedSkills([]);
-          
-          setTimeout(() => {
-            setCurrentTask(null);
-            setTaskStatus(null);
-          }, 3000);
-        } else if (status.status === 'failed') {
-          clearInterval(pollInterval);
-          setIsAssigning(false);
-          showNotification('error', 
-            'Assignment failed: ' + (status.error || 'Unknown error')
-          );
-        }
-      } catch (error) {
-        clearInterval(pollInterval);
-        setIsAssigning(false);
-        showNotification('error', 'Error checking status: ' + error.message);
-      }
-    }, 1000);
-  };
+  useEffect(() => {
+    if (queueData.allTasks.some(t => t.status === 'completed')) {
+      loadHistory();
+    }
+  }, [queueData]);
 
   if (!isAuthenticated) {
     return (
@@ -324,22 +331,110 @@ export default function App() {
 
           <button
             onClick={handleAssign}
-            disabled={!selectedStudent || selectedSkills.length === 0 || isAssigning}
+            disabled={!selectedStudent || selectedSkills.length === 0}
             className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isAssigning 
-              ? 'Assigning Skills...' 
-              : `Assign ${selectedSkills.length} Skill${selectedSkills.length !== 1 ? 's' : ''} to Student`
-            }
+            {`Add to Queue: ${selectedSkills.length} Skill${selectedSkills.length !== 1 ? 's' : ''}`}
           </button>
+
+          {/* Queue Status */}
+          {(queueData.queue.length > 0 || queueData.allTasks.length > 0) && (
+            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-3">Assignment Queue</h3>
+              
+              {queueData.allTasks.filter(t => t.status === 'processing').map(task => (
+                <div key={task.id} className="mb-2 p-3 bg-white rounded border border-blue-300">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-medium">{task.studentName}</span>
+                      <span className="text-sm text-gray-600 ml-2">
+                        ({task.progress || 0}/{task.total} skills)
+                      </span>
+                    </div>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      Processing...
+                    </span>
+                  </div>
+                  {task.currentSkill && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Current: {task.currentSkill}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {queueData.queue.map((task, index) => (
+                <div key={task.id} className="mb-2 p-3 bg-gray-50 rounded border border-gray-300">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-medium">{task.studentName}</span>
+                      <span className="text-sm text-gray-600 ml-2">
+                        ({task.total} skills)
+                      </span>
+                    </div>
+                    <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
+                      Queued #{index + 1}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* History Section */}
+          <div className="mt-6">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="w-full text-left px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 flex justify-between items-center"
+            >
+              <span>Assignment History ({history.length})</span>
+              <span>{showHistory ? '▼' : '▶'}</span>
+            </button>
+
+            {showHistory && (
+              <div className="mt-3 max-h-96 overflow-y-auto border border-gray-300 rounded-lg">
+                {history.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">
+                    No assignment history yet
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {history.map((item) => (
+                      <div key={item.id} className="p-3 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">
+                              {item.student_name}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {item.skill_name}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              {new Date(item.assigned_at).toLocaleString()}
+                            </div>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            item.status === 'completed' 
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+                        {item.error_message && (
+                          <div className="text-xs text-red-600 mt-2">
+                            Error: {item.error_message}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <ProgressModal
-        isOpen={isAssigning}
-        taskStatus={taskStatus}
-        skills={skills}
-      />
 
       {notification && (
         <Notification

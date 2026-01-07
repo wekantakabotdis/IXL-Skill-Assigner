@@ -1,3 +1,10 @@
+function compareCategories(catA, catB) {
+  if (catA.length !== catB.length) {
+    return catA.length - catB.length;
+  }
+  return catA.localeCompare(catB);
+}
+
 export function parseRange(rangeStr, allSkills) {
   const trimmed = rangeStr.trim().toUpperCase();
   
@@ -63,7 +70,7 @@ export function parseRange(rangeStr, allSkills) {
       return true;
     }
     
-    if (cat > startCategory && cat < endCategory) {
+    if (compareCategories(cat, startCategory) > 0 && compareCategories(cat, endCategory) < 0) {
       return true;
     }
     

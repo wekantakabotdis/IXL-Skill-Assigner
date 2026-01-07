@@ -64,5 +64,10 @@ export const api = {
       : `${API_URL}/history?limit=${limit}`;
     const res = await fetch(url);
     return res.json();
+  },
+
+  async getQueue() {
+    const res = await fetch(`${API_URL}/queue`);
+    return res.json();
   }
 };

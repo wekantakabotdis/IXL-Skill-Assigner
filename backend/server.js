@@ -200,6 +200,35 @@ app.get('/api/history', (req, res) => {
   }
 });
 
+app.get('/api/queue', (req, res) => {
+  try {
+    const queueWithDetails = assignmentQueue.map(task => {
+      const student = db.getStudent(task.studentId);
+      const skills = db.getSkillsByIds(task.skillIds);
+      return {
+        ...task,
+        studentName: student?.name || 'Unknown',
+        skillCodes: skills.map(s => s.skill_code || s.skillCode).filter(Boolean)
+      };
+    });
+
+    const allTasks = Array.from(taskStatuses.values()).map(task => {
+      const student = db.getStudent(task.studentId);
+      return {
+        ...task,
+        studentName: student?.name || 'Unknown'
+      };
+    });
+
+    res.json({ 
+      queue: queueWithDetails,
+      allTasks: allTasks.filter(t => t.status !== 'queued')
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 async function processQueue() {
   if (isProcessingQueue || assignmentQueue.length === 0) {
     return;
