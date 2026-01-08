@@ -31,10 +31,8 @@ An automated desktop application for assigning IXL skills to students. This tool
    npm install
    ```
 
-4. Install Playwright browsers:
-   ```bash
-   npx playwright install chromium
-   ```
+4. **Browser Setup**:
+   - Ensure you have **Google Chrome** installed on your computer. The application uses your official browser for automation.
 
 ## Running the Application
 

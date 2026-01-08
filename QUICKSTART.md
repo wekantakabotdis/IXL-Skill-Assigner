@@ -12,10 +12,8 @@
    npm install
    ```
 
-3. Install Playwright browser:
-   ```bash
-   npx playwright install chromium
-   ```
+3. **Browser Setup**:
+   - Ensure you have **Google Chrome** installed on your computer. The app will use it automatically.
 
 ## Running the App
 

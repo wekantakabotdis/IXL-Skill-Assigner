@@ -10,39 +10,10 @@ class IXLBrowser {
     this.isLoggedIn = false;
   }
 
-  async ensureBrowserInstalled() {
-    try {
-      // Try to get the browser executable path - if it fails, browser isn't installed
-      const executablePath = chromium.executablePath();
-      const fs = require('fs');
-      if (fs.existsSync(executablePath)) {
-        console.log('Chromium browser found at:', executablePath);
-        return true;
-      }
-    } catch (e) {
-      // Browser not installed
-    }
-
-    console.log('Chromium browser not found. Installing... (this may take a few minutes)');
-    try {
-      execSync('npx playwright install chromium', {
-        stdio: 'inherit',
-        timeout: 300000 // 5 minute timeout
-      });
-      console.log('Chromium installed successfully!');
-      return true;
-    } catch (error) {
-      console.error('Failed to install Chromium:', error.message);
-      throw new Error('Could not install Chromium browser. Please run: npx playwright install chromium');
-    }
-  }
-
   async launch() {
-    // Ensure browser is installed before trying to launch
-    await this.ensureBrowserInstalled();
-
     this.browser = await chromium.launch({
       headless: false,
+      channel: 'chrome',
       args: [
         '--disable-blink-features=AutomationControlled',
         '--disable-dev-shm-usage',
