@@ -370,34 +370,28 @@ export default function App() {
                 Assign skills to your students with ease
               </p>
             </div>
-            <div className="flex items-center gap-3 px-5 py-3 rounded-xl paper-card animate-slideInRight">
-              <span className="w-3 h-3 rounded-full status-dot" style={{ background: '#7d9d7c' }}></span>
-              <span className="text-sm font-medium" style={{ color: '#6b4423' }}>Connected</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  if (currentView === 'history') {
+                    setCurrentView('assign');
+                  } else {
+                    setCurrentView('history');
+                    loadHistory();
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${currentView === 'history'
+                    ? 'bg-[#5a3519] text-white shadow-md'
+                    : 'bg-[rgba(139,69,19,0.08)] text-[#6b4423] hover:bg-[rgba(139,69,19,0.12)]'
+                  }`}
+              >
+                {currentView === 'history' ? '← Back' : 'History'}
+              </button>
+              <div className="flex items-center gap-3 px-4 py-2 rounded-xl paper-card">
+                <span className="w-3 h-3 rounded-full status-dot" style={{ background: '#7d9d7c' }}></span>
+                <span className="text-sm font-medium" style={{ color: '#6b4423' }}>Connected</span>
+              </div>
             </div>
-          </div>
-
-          <div className="flex gap-4 border-b border-[rgba(139,69,19,0.1)] pb-1">
-            <button
-              onClick={() => setCurrentView('assign')}
-              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${currentView === 'assign'
-                  ? 'text-[#5a3519] bg-[#fffaf5] border-t border-x border-[rgba(139,69,19,0.1)] shadow-[0_-2px_4px_rgba(139,69,19,0.02)]'
-                  : 'text-[#8b7b6b] hover:bg-[rgba(139,69,19,0.03)]'
-                }`}
-            >
-              Assign Skills
-            </button>
-            <button
-              onClick={() => {
-                setCurrentView('history');
-                loadHistory();
-              }}
-              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${currentView === 'history'
-                  ? 'text-[#5a3519] bg-[#fffaf5] border-t border-x border-[rgba(139,69,19,0.1)] shadow-[0_-2px_4px_rgba(139,69,19,0.02)]'
-                  : 'text-[#8b7b6b] hover:bg-[rgba(139,69,19,0.03)]'
-                }`}
-            >
-              History
-            </button>
           </div>
         </header>
 
@@ -475,34 +469,15 @@ export default function App() {
               <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
                 Action Mode
               </label>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActionMode('suggest')}
-                  className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all ${actionMode === 'suggest'
-                      ? 'bg-[#7d9d7c] text-white shadow-md'
-                      : 'bg-[rgba(125,157,124,0.1)] text-[#5a7a59] border border-[rgba(125,157,124,0.3)]'
-                    }`}
-                  style={{
-                    transform: actionMode === 'suggest' ? 'translateY(-1px)' : 'translateY(0)'
-                  }}
-                >
-                  ⭐ Suggest
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActionMode('stop_suggesting')}
-                  className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all ${actionMode === 'stop_suggesting'
-                      ? 'bg-[#c17c5b] text-white shadow-md'
-                      : 'bg-[rgba(193,124,91,0.1)] text-[#8b5a3c] border border-[rgba(193,124,91,0.3)]'
-                    }`}
-                  style={{
-                    transform: actionMode === 'stop_suggesting' ? 'translateY(-1px)' : 'translateY(0)'
-                  }}
-                >
-                  ✕ Stop Suggesting
-                </button>
-              </div>
+              <select
+                value={actionMode}
+                onChange={(e) => setActionMode(e.target.value)}
+                className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
+                style={{ color: '#5a3519' }}
+              >
+                <option value="suggest">⭐ Suggest</option>
+                <option value="stop_suggesting">✕ Stop Suggesting</option>
+              </select>
               <p className="text-xs mt-2" style={{ color: '#b5a594' }}>
                 {actionMode === 'suggest'
                   ? 'Skills will be suggested to the student (star selected)'
@@ -584,7 +559,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-2">
               {getGroupedHistory().length === 0 ? (
                 <div className="p-12 text-center" style={{ color: '#b5a594' }}>
                   <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="currentColor" viewBox="0 0 20 20">
@@ -598,70 +573,60 @@ export default function App() {
                   const isExpanded = expandedBatches.has(group.id);
                   const successCount = group.items.filter(i => i.status === 'completed').length;
                   const failCount = group.items.length - successCount;
+                  const hasFailures = failCount > 0;
 
                   return (
-                    <div key={group.id} className="rounded-xl overflow-hidden border transition-all duration-300" style={{
-                      borderColor: 'rgba(139, 69, 19, 0.1)',
-                      background: '#fffaf5'
+                    <div key={group.id} className="rounded-lg overflow-hidden border transition-all duration-300" style={{
+                      borderColor: hasFailures ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)',
+                      background: hasFailures ? 'rgba(254, 242, 242, 0.5)' : 'rgba(240, 253, 244, 0.5)'
                     }}>
-                      <div
-                        className="p-5 flex items-center justify-between cursor-pointer hover:bg-[rgba(139,69,19,0.03)] transition-colors"
-                        onClick={() => toggleBatch(group.id)}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-sm ${failCount > 0 ? 'bg-red-100 text-red-800' : 'bg-[#e6f4ea] text-[#1e4620]'
-                            }`}>
-                            {group.student_name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-lg" style={{ color: '#5a3519' }}>
-                              {group.student_name}
+                      <div className="p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ background: hasFailures ? '#ef4444' : '#22c55e' }}
+                            title={hasFailures ? `${failCount} failed` : 'All successful'}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm" style={{ color: '#5a3519' }}>
+                                {group.student_name}
+                              </span>
+                              <span className="text-xs" style={{ color: '#8b7b6b' }}>
+                                • {group.items.length} skills
+                              </span>
                             </div>
-                            <div className="text-sm flex gap-3 mt-1" style={{ color: '#8b7b6b' }}>
-                              <span>{group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              <span>•</span>
-                              <span>{group.items.length} skills assigned</span>
+                            <div className="text-xs" style={{ color: '#b5a594' }}>
+                              {group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-end">
-                            {failCount > 0 ? (
-                              <span className="badge badge-error mb-1">
-                                {failCount} Failed
-                              </span>
-                            ) : (
-                              <span className="badge badge-success mb-1">
-                                All Success
-                              </span>
-                            )}
-                            <span className="text-xs text-[#b5a594]">
-                              Click to {isExpanded ? 'collapse' : 'expand'}
-                            </span>
-                          </div>
-                        </div>
+                        <button
+                          onClick={() => toggleBatch(group.id)}
+                          className="px-3 py-1 rounded-md text-xs font-medium transition-all hover:opacity-80"
+                          style={{
+                            background: 'rgba(139, 69, 19, 0.08)',
+                            color: '#6b4423'
+                          }}
+                        >
+                          {isExpanded ? '▲ Hide' : '▼ Show'}
+                        </button>
                       </div>
 
                       {isExpanded && (
-                        <div className="border-t border-[rgba(139,69,19,0.06)] bg-[rgba(255,250,245,0.5)]">
+                        <div className="border-t border-[rgba(139,69,19,0.08)] bg-white">
                           {group.items.map((item) => (
-                            <div key={item.id} className="p-3 pl-20 flex justify-between items-center border-b border-[rgba(139,69,19,0.03)] last:border-0 hover:bg-white transition-colors">
-                              <span className="font-medium" style={{ color: '#6b4423' }}>
+                            <div key={item.id} className="px-3 py-2 flex items-center gap-2 border-b border-[rgba(139,69,19,0.04)] last:border-0">
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ background: item.status === 'completed' ? '#22c55e' : '#ef4444' }}
+                              />
+                              <span className="text-sm flex-1" style={{ color: '#6b4423' }}>
                                 {item.skill_name}
                               </span>
-                              {item.status === 'completed' ? (
-                                <span className="text-xs font-bold text-green-700 bg-green-50 px-2 py-1 rounded">
-                                  Completed
-                                </span>
-                              ) : (
-                                <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded flex items-center gap-2">
-                                  Failed
-                                  {item.error_message && (
-                                    <span className="font-normal opacity-75 hidden md:inline">
-                                      - {item.error_message}
-                                    </span>
-                                  )}
+                              {item.status !== 'completed' && item.error_message && (
+                                <span className="text-xs text-red-500 truncate max-w-[150px]" title={item.error_message}>
+                                  {item.error_message}
                                 </span>
                               )}
                             </div>
