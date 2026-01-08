@@ -1,6 +1,6 @@
 export default function StudentSelector({ students, selectedStudent, onSelect, onSync }) {
   console.log('StudentSelector rendering with students:', students);
-  
+
   return (
     <div className="mb-6">
       <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
@@ -19,14 +19,14 @@ export default function StudentSelector({ students, selectedStudent, onSelect, o
           <option value="">Choose a student...</option>
           {students && students.map((student) => (
             <option key={student.id} value={student.id}>
-              {student.name} {student.class_name && `(${student.class_name})`}
+              {student.name}
             </option>
           ))}
         </select>
         <button
           onClick={onSync}
           className="px-5 py-3 rounded-xl text-sm font-semibold transition-all"
-          style={{ 
+          style={{
             background: 'rgba(193, 124, 91, 0.1)',
             color: '#8b5a3c',
             border: '1.5px solid rgba(193, 124, 91, 0.2)'
