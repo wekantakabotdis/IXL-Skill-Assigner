@@ -307,6 +307,10 @@ async function processQueue() {
         );
       });
 
+      if (gradeLevel) {
+        db.updateStudentDefaultGrade(task.studentId, gradeLevel);
+      }
+
       taskStatuses.set(task.id, {
         ...task,
         status: 'completed',

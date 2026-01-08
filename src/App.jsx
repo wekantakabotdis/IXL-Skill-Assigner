@@ -102,6 +102,16 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (selectedStudent && students.length > 0) {
+      const student = students.find(s => s.id === selectedStudent);
+      if (student && student.default_grade && student.default_grade !== gradeLevel) {
+        showNotification('info', `Switching to Grade ${student.default_grade} based on student's history`);
+        handleGradeChange(student.default_grade);
+      }
+    }
+  }, [selectedStudent, students]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoggingIn(true);

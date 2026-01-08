@@ -18,6 +18,11 @@ class DB {
       this.db.exec('ALTER TABLE skills ADD COLUMN skill_code TEXT');
     } catch (e) {
     }
+
+    try {
+      this.db.exec('ALTER TABLE students ADD COLUMN default_grade TEXT');
+    } catch (e) {
+    }
   }
 
   getStudents() {
@@ -37,7 +42,11 @@ class DB {
 
   updateStudents(students) {
     const stmt = this.db.prepare(
-      "INSERT OR REPLACE INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))"
+      `INSERT INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(ixl_id) DO UPDATE SET
+         name=excluded.name,
+         class_name=excluded.class_name,
+         last_synced=excluded.last_synced`
     );
     const transaction = this.db.transaction((students) => {
       for (const student of students) {
@@ -45,6 +54,13 @@ class DB {
       }
     });
     transaction(students);
+  }
+
+  updateStudentDefaultGrade(studentId, gradeLevel) {
+    const stmt = this.db.prepare(
+      'UPDATE students SET default_grade = ? WHERE id = ?'
+    );
+    return stmt.run(gradeLevel, studentId);
   }
 
   getSkills(gradeLevel = null) {

@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS students (
   ixl_id TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   class_name TEXT,
+  default_grade TEXT,
   last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
