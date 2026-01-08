@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from './utils/api';
+import { parseRange } from './utils/skillHelpers';
 import StudentSelector from './components/StudentSelector';
 import SkillsSelector from './components/SkillsSelector';
 import ProgressModal from './components/ProgressModal';
@@ -15,7 +16,7 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [skills, setSkills] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [selectedSkills, setSelectedSkills] = useState([]);
+  const [rangeInput, setRangeInput] = useState('');
   const [gradeLevel, setGradeLevel] = useState('1');
 
   const [isAssigning, setIsAssigning] = useState(false);
@@ -188,7 +189,7 @@ export default function App() {
 
   const handleGradeChange = async (newGrade, forceSync = false) => {
     setGradeLevel(newGrade);
-    setSelectedSkills([]);
+    setRangeInput('');
     
     try {
       showNotification('info', `Loading Grade ${newGrade} skills...`);
@@ -242,35 +243,41 @@ export default function App() {
     }
   };
 
-  const toggleSkill = (skillId) => {
-    setSelectedSkills(prev => 
-      prev.includes(skillId)
-        ? prev.filter(id => id !== skillId)
-        : [...prev, skillId]
-    );
-  };
-
-  const setMultipleSkills = (skillIds) => {
-    setSelectedSkills(skillIds);
-  };
-
   const handleAssign = async () => {
     if (!selectedStudent) {
       showNotification('error', 'Please select a student');
       return;
     }
 
-    if (selectedSkills.length === 0) {
-      showNotification('error', 'Please select at least one skill');
+    if (!rangeInput.trim()) {
+      showNotification('error', 'Please enter a skill range (e.g., A.1-A.5)');
+      return;
+    }
+
+    if (skills.length === 0) {
+      showNotification('error', 'No skills loaded. Click the Sync button to load skills.');
+      return;
+    }
+
+    const skillIds = parseRange(rangeInput, skills);
+    
+    if (!skillIds || skillIds.length === 0) {
+      const categories = [...new Set(skills.map(s => s.category))]
+        .sort((a, b) => {
+          if (a.length !== b.length) return a.length - b.length;
+          return a.localeCompare(b);
+        })
+        .join(', ');
+      showNotification('error', `No skills found for range "${rangeInput}". Available categories: ${categories}`);
       return;
     }
 
     try {
-      const result = await api.assignSkills(selectedStudent, selectedSkills);
+      const result = await api.assignSkills(selectedStudent, skillIds);
       
       if (result.taskId) {
-        showNotification('success', `Task queued! ${selectedSkills.length} skills for assignment.`);
-        setSelectedSkills([]);
+        showNotification('success', `Task queued! ${skillIds.length} skills for assignment.`);
+        setRangeInput('');
         setSelectedStudent(null);
         loadHistory();
       } else {
@@ -461,17 +468,16 @@ export default function App() {
 
             <SkillsSelector
               skills={skills}
-              selectedSkills={selectedSkills}
-              onToggle={toggleSkill}
-              onSelectMultiple={setMultipleSkills}
+              rangeInput={rangeInput}
+              onRangeChange={setRangeInput}
             />
 
             <button
               onClick={handleAssign}
-              disabled={!selectedStudent || selectedSkills.length === 0}
+              disabled={!selectedStudent || !rangeInput.trim()}
               className="btn-ink w-full py-5 rounded-xl font-semibold text-lg tracking-wide"
             >
-              {`Add to Queue: ${selectedSkills.length} Skill${selectedSkills.length !== 1 ? 's' : ''}`}
+              Add to Queue
             </button>
 
             {(queueData.queue.length > 0 || queueData.allTasks.length > 0) && (
