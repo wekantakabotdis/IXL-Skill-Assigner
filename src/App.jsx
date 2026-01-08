@@ -224,6 +224,24 @@ export default function App() {
     handleGradeChange(gradeLevel, true);
   };
 
+  const handleSyncStudents = async () => {
+    try {
+      showNotification('info', 'Syncing students from IXL...');
+      const syncResult = await api.syncStudents();
+      console.log('Student sync result:', syncResult);
+      
+      if (syncResult.success && syncResult.students) {
+        setStudents(syncResult.students);
+        showNotification('success', `Synced ${syncResult.students.length} students!`);
+      } else {
+        showNotification('error', 'Failed to sync students');
+      }
+    } catch (error) {
+      console.error('Error syncing students:', error);
+      showNotification('error', 'Error syncing students: ' + error.message);
+    }
+  };
+
   const toggleSkill = (skillId) => {
     setSelectedSkills(prev => 
       prev.includes(skillId)
@@ -389,6 +407,7 @@ export default function App() {
               students={students}
               selectedStudent={selectedStudent}
               onSelect={setSelectedStudent}
+              onSync={handleSyncStudents}
             />
 
             <div className="mb-6">
