@@ -86,14 +86,14 @@ app.post('/api/sync/students', async (req, res) => {
 
 app.post('/api/sync/skills', async (req, res) => {
   try {
-    const { gradeLevel = '8' } = req.body;
+    const { gradeLevel = '8', subject = 'math' } = req.body;
 
     if (!browser.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const page = browser.getPage();
-    const skills = await scrapeSkills(page, gradeLevel);
+    const skills = await scrapeSkills(page, gradeLevel, subject);
 
     if (skills.length > 0) {
       db.updateSkills(skills);
@@ -126,8 +126,8 @@ app.get('/api/students', (req, res) => {
 
 app.get('/api/skills', (req, res) => {
   try {
-    const { gradeLevel } = req.query;
-    const skills = db.getSkills(gradeLevel);
+    const { gradeLevel, subject = 'math' } = req.query;
+    const skills = db.getSkills(gradeLevel, subject);
     res.json(skills);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -278,9 +278,10 @@ async function processQueue() {
       }
 
       const gradeLevel = skills[0].grade_level || skills[0].gradeLevel;
+      const subject = skills[0].subject || 'math';
       const page = browser.getPage();
 
-      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${student.name} (Grade ${gradeLevel})`);
+      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} ${subject} skills to ${student.name} (Grade ${gradeLevel})`);
       console.log(`Skills: ${skillsData.map(s => s.skillCode).join(', ')}`);
 
       const results = await assignMultipleSkills(
@@ -296,7 +297,8 @@ async function processQueue() {
             progress: progress.current,
             currentSkill: progress.currentSkill
           });
-        }
+        },
+        subject
       );
 
       results.forEach((result, index) => {

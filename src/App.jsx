@@ -17,6 +17,7 @@ export default function App() {
   const [skills, setSkills] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [rangeInput, setRangeInput] = useState('');
+  const [subject, setSubject] = useState('math');
   const [gradeLevel, setGradeLevel] = useState('1');
   const [actionMode, setActionMode] = useState('suggest');
 
@@ -147,7 +148,7 @@ export default function App() {
       console.log('Loading data...');
       const [studentsData, skillsData] = await Promise.all([
         api.getStudents(),
-        api.getSkills(gradeLevel)
+        api.getSkills(gradeLevel, subject)
       ]);
 
       console.log('Received students data:', studentsData.length);
@@ -170,7 +171,7 @@ export default function App() {
       if (skillsData.length === 0) {
         console.log('No skills in DB for grade', gradeLevel, '- syncing from IXL...');
         showNotification('info', 'Syncing skills from IXL... Browser will navigate to grade page.');
-        const syncResult = await api.syncSkills(gradeLevel);
+        const syncResult = await api.syncSkills(gradeLevel, subject);
         console.log('Skills sync result:', syncResult);
         if (syncResult.skills && syncResult.skills.length > 0) {
           setSkills(syncResult.skills);
@@ -197,13 +198,13 @@ export default function App() {
 
       let skillsData = [];
       if (!forceSync) {
-        skillsData = await api.getSkills(newGrade);
+        skillsData = await api.getSkills(newGrade, subject);
       }
 
       if (skillsData.length === 0 || forceSync) {
-        showNotification('info', `Syncing Grade ${newGrade} skills from IXL... Browser will navigate.`);
-        console.log(`Syncing skills for grade ${newGrade}...`);
-        const syncResult = await api.syncSkills(newGrade);
+        showNotification('info', `Syncing Grade ${newGrade} ${subject} skills from IXL... Browser will navigate.`);
+        console.log(`Syncing ${subject} skills for grade ${newGrade}...`);
+        const syncResult = await api.syncSkills(newGrade, subject);
         console.log('Sync result:', syncResult);
 
         if (syncResult.skills && syncResult.skills.length > 0) {
@@ -224,6 +225,36 @@ export default function App() {
 
   const handleForceSync = () => {
     handleGradeChange(gradeLevel, true);
+  };
+
+  const handleSubjectChange = async (newSubject) => {
+    setSubject(newSubject);
+    setRangeInput('');
+    setSkills([]);
+
+    try {
+      showNotification('info', `Loading ${newSubject === 'ela' ? 'ELA' : 'Math'} skills...`);
+
+      let skillsData = await api.getSkills(gradeLevel, newSubject);
+
+      if (skillsData.length === 0) {
+        showNotification('info', `Syncing ${newSubject === 'ela' ? 'ELA' : 'Math'} skills from IXL...`);
+        const syncResult = await api.syncSkills(gradeLevel, newSubject);
+
+        if (syncResult.skills && syncResult.skills.length > 0) {
+          setSkills(syncResult.skills);
+          showNotification('success', `Loaded ${syncResult.skills.length} ${newSubject === 'ela' ? 'ELA' : 'Math'} skills!`);
+        } else {
+          showNotification('error', `No skills found for ${newSubject === 'ela' ? 'ELA' : 'Math'}. Try clicking the Sync button.`);
+        }
+      } else {
+        setSkills(skillsData);
+        showNotification('success', `Loaded ${skillsData.length} ${newSubject === 'ela' ? 'ELA' : 'Math'} skills from cache.`);
+      }
+    } catch (error) {
+      console.error('Error loading skills:', error);
+      showNotification('error', 'Error loading skills: ' + error.message);
+    }
   };
 
   const handleSyncStudents = async () => {
@@ -381,8 +412,8 @@ export default function App() {
                   }
                 }}
                 className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${currentView === 'history'
-                    ? 'bg-[#5a3519] text-white shadow-md'
-                    : 'bg-[rgba(139,69,19,0.08)] text-[#6b4423] hover:bg-[rgba(139,69,19,0.12)]'
+                  ? 'bg-[#5a3519] text-white shadow-md'
+                  : 'bg-[rgba(139,69,19,0.08)] text-[#6b4423] hover:bg-[rgba(139,69,19,0.12)]'
                   }`}
               >
                 {currentView === 'history' ? '← Back' : 'History'}
@@ -409,6 +440,21 @@ export default function App() {
               onSelect={setSelectedStudent}
               onSync={handleSyncStudents}
             />
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+                Subject
+              </label>
+              <select
+                value={subject}
+                onChange={(e) => handleSubjectChange(e.target.value)}
+                className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
+                style={{ color: '#5a3519' }}
+              >
+                <option value="math">📐 Math</option>
+                <option value="ela">📚 ELA (Language Arts)</option>
+              </select>
+            </div>
 
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>

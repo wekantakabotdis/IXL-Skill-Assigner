@@ -60,6 +60,11 @@ class DB {
       this.db.exec('ALTER TABLE students ADD COLUMN default_grade TEXT');
     } catch (e) {
     }
+
+    try {
+      this.db.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
+    } catch (e) {
+    }
   }
 
   getStudents() {
@@ -100,15 +105,15 @@ class DB {
     return stmt.run(gradeLevel, studentId);
   }
 
-  getSkills(gradeLevel = null) {
+  getSkills(gradeLevel = null, subject = 'math') {
     if (gradeLevel) {
       return this.db.prepare(
-        'SELECT * FROM skills WHERE grade_level = ? ORDER BY category, display_order'
-      ).all(gradeLevel);
+        'SELECT * FROM skills WHERE grade_level = ? AND (subject = ? OR subject IS NULL) ORDER BY category, display_order'
+      ).all(gradeLevel, subject);
     }
     return this.db.prepare(
-      'SELECT * FROM skills ORDER BY category, display_order'
-    ).all();
+      'SELECT * FROM skills WHERE (subject = ? OR subject IS NULL) ORDER BY category, display_order'
+    ).all(subject);
   }
 
   getSkillsByIds(ids) {
@@ -133,7 +138,7 @@ class DB {
 
   updateSkills(skills) {
     const stmt = this.db.prepare(
-      'INSERT OR REPLACE INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order, subject) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const transaction = this.db.transaction((skills) => {
       for (const skill of skills) {
@@ -144,7 +149,8 @@ class DB {
           skill.category,
           skill.gradeLevel,
           skill.url,
-          skill.displayOrder
+          skill.displayOrder,
+          skill.subject || 'math'
         );
       }
     });

@@ -246,7 +246,7 @@ async function assignSkillFromGradePage(page, skillData, studentName, action = '
   }
 }
 
-async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, action = 'suggest', progressCallback) {
+async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, action = 'suggest', progressCallback, subject = 'math') {
   const results = [];
 
   const gradeUrlMap = {
@@ -254,9 +254,9 @@ async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, a
     'kindergarten': 'kindergarten',
   };
   const urlGrade = gradeUrlMap[gradeLevel] || gradeLevel;
-  const gradePageUrl = `https://www.ixl.com/math/grade-${urlGrade}`;
+  const gradePageUrl = `https://www.ixl.com/${subject}/grade-${urlGrade}`;
 
-  console.log(`Navigating to grade page: ${gradePageUrl}`);
+  console.log(`Navigating to ${subject} grade page: ${gradePageUrl}`);
   await page.goto(gradePageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('.skill-tree-skill-node', { timeout: 15000 });
   await page.waitForTimeout(3000);

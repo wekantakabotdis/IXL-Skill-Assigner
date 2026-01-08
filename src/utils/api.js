@@ -22,11 +22,11 @@ export const api = {
     return res.json();
   },
 
-  async syncSkills(gradeLevel = '8') {
+  async syncSkills(gradeLevel = '8', subject = 'math') {
     const res = await fetch(`${API_URL}/sync/skills`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gradeLevel })
+      body: JSON.stringify({ gradeLevel, subject })
     });
     return res.json();
   },
@@ -36,10 +36,11 @@ export const api = {
     return res.json();
   },
 
-  async getSkills(gradeLevel) {
-    const url = gradeLevel
-      ? `${API_URL}/skills?gradeLevel=${gradeLevel}`
-      : `${API_URL}/skills`;
+  async getSkills(gradeLevel, subject = 'math') {
+    let url = `${API_URL}/skills?subject=${subject}`;
+    if (gradeLevel) {
+      url += `&gradeLevel=${gradeLevel}`;
+    }
     const res = await fetch(url);
     return res.json();
   },
