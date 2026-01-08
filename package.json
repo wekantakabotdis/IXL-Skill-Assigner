@@ -36,6 +36,7 @@
     "concurrently": "^8.2.2",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
+    "electron-icon-builder": "^2.0.1",
     "nodemon": "^3.0.2",
     "postcss": "^8.4.32",
     "react": "^18.2.0",
@@ -70,13 +71,13 @@
         "dmg"
       ],
       "category": "public.app-category.education",
-      "icon": "build/icon.icns"
+      "icon": "build/icons/mac/icon.icns"
     },
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icons/win/icon.ico"
     },
     "nsis": {
       "oneClick": false,

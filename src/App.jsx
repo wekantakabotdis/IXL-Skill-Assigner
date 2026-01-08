@@ -335,25 +335,28 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 relative">
+        {/* IXL Header Bar */}
+        <div className="fixed top-0 left-0 right-0 h-1 ixl-header-bar"></div>
+
         <div className="paper-card rounded-2xl p-10 w-full max-w-lg relative z-10 animate-scaleIn">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold mb-2 accent-underline inline-block" style={{ fontFamily: "'Crimson Pro', serif", color: '#5a3519' }}>
+            <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--ixl-green)' }}>
               IXL Skill Assigner
             </h1>
-            <p className="text-base mt-6" style={{ color: '#8b7b6b' }}>
+            <p className="text-base mt-6" style={{ color: 'var(--ixl-gray-dark)' }}>
               Begin by opening your browser to log in to IXL
             </p>
           </div>
 
           <form onSubmit={handleLogin}>
             <div className="mb-6 p-5 rounded-xl" style={{
-              background: 'linear-gradient(135deg, rgba(193, 124, 91, 0.08) 0%, rgba(193, 124, 91, 0.04) 100%)',
-              border: '1.5px solid rgba(193, 124, 91, 0.15)'
+              background: 'linear-gradient(135deg, rgba(0, 174, 239, 0.08) 0%, rgba(0, 174, 239, 0.04) 100%)',
+              border: '1.5px solid rgba(0, 174, 239, 0.2)'
             }}>
-              <p className="text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+              <p className="text-sm font-semibold mb-3" style={{ color: 'var(--ixl-turquoise-dark)' }}>
                 Getting Started
               </p>
-              <ol className="text-sm space-y-2 ml-5 list-decimal" style={{ color: '#8b7b6b' }}>
+              <ol className="text-sm space-y-2 ml-5 list-decimal" style={{ color: 'var(--ixl-gray-dark)' }}>
                 <li>Click the button below to launch your browser</li>
                 <li>Log in to IXL with your teacher account</li>
                 <li>Return here once logged in</li>
@@ -370,8 +373,8 @@ export default function App() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-[rgba(139,69,19,0.08)]">
-            <p className="text-xs text-center" style={{ color: '#b5a594' }}>
+          <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--ixl-gray)' }}>
+            <p className="text-xs text-center" style={{ color: 'var(--ixl-gray-dark)' }}>
               Your credentials are sent directly to IXL and not stored
             </p>
           </div>
@@ -390,14 +393,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen p-8 relative">
-      <div className="max-w-5xl mx-auto relative z-10">
+      {/* IXL Header Bar */}
+      <div className="fixed top-0 left-0 right-0 h-1 ixl-header-bar"></div>
+
+      <div className="max-w-5xl mx-auto relative z-10 pt-4">
         <header className="mb-10 animate-fadeInUp">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <h1 className="text-5xl font-bold mb-3" style={{ fontFamily: "'Crimson Pro', serif", color: '#5a3519' }}>
+              <h1 className="text-5xl font-bold mb-3" style={{ color: 'var(--ixl-green)' }}>
                 IXL Skill Assigner
               </h1>
-              <p className="text-lg" style={{ color: '#8b7b6b' }}>
+              <p className="text-lg" style={{ color: 'var(--ixl-gray-dark)' }}>
                 Assign skills to your students with ease
               </p>
             </div>
@@ -412,24 +418,28 @@ export default function App() {
                   }
                 }}
                 className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${currentView === 'history'
-                  ? 'bg-[#5a3519] text-white shadow-md'
-                  : 'bg-[rgba(139,69,19,0.08)] text-[#6b4423] hover:bg-[rgba(139,69,19,0.12)]'
+                  ? 'text-white shadow-md'
+                  : 'hover:opacity-80'
                   }`}
+                style={{
+                  background: currentView === 'history' ? 'var(--ixl-turquoise)' : 'rgba(0, 174, 239, 0.1)',
+                  color: currentView === 'history' ? 'white' : 'var(--ixl-turquoise-dark)'
+                }}
               >
                 {currentView === 'history' ? '← Back' : 'History'}
               </button>
               <div className="flex items-center gap-3 px-4 py-2 rounded-xl paper-card">
-                <span className="w-3 h-3 rounded-full status-dot" style={{ background: '#7d9d7c' }}></span>
-                <span className="text-sm font-medium" style={{ color: '#6b4423' }}>Connected</span>
+                <span className="w-3 h-3 rounded-full status-dot" style={{ background: 'var(--ixl-green)' }}></span>
+                <span className="text-sm font-medium" style={{ color: 'var(--ixl-text)' }}>Connected</span>
               </div>
             </div>
           </div>
         </header>
 
         {currentView === 'assign' ? (
-          <div className="paper-card rounded-b-2xl rounded-tr-2xl p-8 animate-fadeInUp stagger-1">
+          <div className="paper-card rounded-2xl p-8 animate-fadeInUp stagger-1">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-semibold" style={{ fontFamily: "'Crimson Pro', serif", color: '#6b4423' }}>
+              <h2 className="text-2xl font-semibold" style={{ color: 'var(--ixl-text)' }}>
                 Assignment Workspace
               </h2>
             </div>
@@ -442,14 +452,14 @@ export default function App() {
             />
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+              <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
                 Subject
               </label>
               <select
                 value={subject}
                 onChange={(e) => handleSubjectChange(e.target.value)}
                 className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
-                style={{ color: '#5a3519' }}
+                style={{ color: 'var(--ixl-text)' }}
               >
                 <option value="math">📐 Math</option>
                 <option value="ela">📚 ELA (Language Arts)</option>
@@ -457,7 +467,7 @@ export default function App() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+              <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
                 Grade Level
               </label>
               <div className="flex gap-3">
@@ -465,7 +475,7 @@ export default function App() {
                   value={gradeLevel}
                   onChange={(e) => handleGradeChange(e.target.value)}
                   className="input-field flex-1 px-4 py-3 rounded-xl text-base font-medium transition-all"
-                  style={{ color: '#5a3519' }}
+                  style={{ color: 'var(--ixl-text)' }}
                 >
                   <option value="pre-k">Pre-K</option>
                   <option value="kindergarten">Kindergarten</option>
@@ -484,19 +494,11 @@ export default function App() {
                 </select>
                 <button
                   onClick={handleForceSync}
-                  className="px-5 py-3 rounded-xl text-sm font-semibold transition-all"
+                  className="px-5 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
                   style={{
-                    background: 'rgba(193, 124, 91, 0.1)',
-                    color: '#8b5a3c',
-                    border: '1.5px solid rgba(193, 124, 91, 0.2)'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(193, 124, 91, 0.15)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(193, 124, 91, 0.1)';
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    background: 'rgba(0, 174, 239, 0.1)',
+                    color: 'var(--ixl-turquoise-dark)',
+                    border: '1.5px solid rgba(0, 174, 239, 0.2)'
                   }}
                   title="Force re-sync skills from IXL website"
                 >
@@ -512,19 +514,19 @@ export default function App() {
             />
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+              <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
                 Action Mode
               </label>
               <select
                 value={actionMode}
                 onChange={(e) => setActionMode(e.target.value)}
                 className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
-                style={{ color: '#5a3519' }}
+                style={{ color: 'var(--ixl-text)' }}
               >
                 <option value="suggest">⭐ Suggest</option>
                 <option value="stop_suggesting">✕ Stop Suggesting</option>
               </select>
-              <p className="text-xs mt-2" style={{ color: '#b5a594' }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--ixl-gray-dark)' }}>
                 {actionMode === 'suggest'
                   ? 'Skills will be suggested to the student (star selected)'
                   : 'Skills will be un-suggested from the student (star deselected)'}
@@ -541,10 +543,10 @@ export default function App() {
 
             {(queueData.queue.length > 0 || queueData.allTasks.length > 0) && (
               <div className="mt-8 p-6 rounded-xl" style={{
-                background: 'linear-gradient(135deg, rgba(125, 157, 124, 0.08) 0%, rgba(125, 157, 124, 0.04) 100%)',
-                border: '1.5px solid rgba(125, 157, 124, 0.2)'
+                background: 'linear-gradient(135deg, rgba(139, 197, 63, 0.08) 0%, rgba(139, 197, 63, 0.04) 100%)',
+                border: '1.5px solid rgba(139, 197, 63, 0.2)'
               }}>
-                <h3 className="font-semibold text-lg mb-4" style={{ fontFamily: "'Crimson Pro', serif", color: '#6b4423' }}>
+                <h3 className="font-semibold text-lg mb-4" style={{ color: 'var(--ixl-text)' }}>
                   Assignment Queue
                 </h3>
 
@@ -552,8 +554,8 @@ export default function App() {
                   <div key={task.id} className="mb-3 p-4 rounded-xl paper-card">
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-semibold" style={{ color: '#5a3519' }}>{task.studentName}</span>
-                        <span className="text-sm ml-2" style={{ color: '#8b7b6b' }}>
+                        <span className="font-semibold" style={{ color: 'var(--ixl-text)' }}>{task.studentName}</span>
+                        <span className="text-sm ml-2" style={{ color: 'var(--ixl-gray-dark)' }}>
                           ({task.progress || 0}/{task.total} skills)
                         </span>
                       </div>
@@ -562,7 +564,7 @@ export default function App() {
                       </span>
                     </div>
                     {task.currentSkill && (
-                      <div className="text-xs mt-2" style={{ color: '#b5a594' }}>
+                      <div className="text-xs mt-2" style={{ color: 'var(--ixl-gray-dark)' }}>
                         Current: {task.currentSkill}
                       </div>
                     )}
@@ -571,13 +573,13 @@ export default function App() {
 
                 {queueData.queue.map((task, index) => (
                   <div key={task.id} className="mb-3 p-4 rounded-xl" style={{
-                    background: 'rgba(255, 250, 245, 0.6)',
-                    border: '1.5px solid rgba(139, 69, 19, 0.08)'
+                    background: 'var(--ixl-white)',
+                    border: '1.5px solid var(--ixl-gray)'
                   }}>
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-semibold" style={{ color: '#5a3519' }}>{task.studentName}</span>
-                        <span className="text-sm ml-2" style={{ color: '#8b7b6b' }}>
+                        <span className="font-semibold" style={{ color: 'var(--ixl-text)' }}>{task.studentName}</span>
+                        <span className="text-sm ml-2" style={{ color: 'var(--ixl-gray-dark)' }}>
                           ({task.total} skills)
                         </span>
                       </div>
@@ -591,15 +593,15 @@ export default function App() {
             )}
           </div>
         ) : (
-          <div className="paper-card rounded-b-2xl rounded-tl-2xl p-8 animate-fadeInUp stagger-1">
+          <div className="paper-card rounded-2xl p-8 animate-fadeInUp stagger-1">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-semibold" style={{ fontFamily: "'Crimson Pro', serif", color: '#6b4423' }}>
+              <h2 className="text-2xl font-semibold" style={{ color: 'var(--ixl-text)' }}>
                 Assignment History
               </h2>
               <button
                 onClick={loadHistory}
                 className="text-sm font-medium hover:opacity-70 transition-opacity"
-                style={{ color: '#c17c5b' }}
+                style={{ color: 'var(--ixl-turquoise)' }}
               >
                 Refresh List
               </button>
@@ -607,7 +609,7 @@ export default function App() {
 
             <div className="space-y-2">
               {getGroupedHistory().length === 0 ? (
-                <div className="p-12 text-center" style={{ color: '#b5a594' }}>
+                <div className="p-12 text-center" style={{ color: 'var(--ixl-gray-dark)' }}>
                   <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0h8v12H6V4z" clipRule="evenodd" />
                   </svg>
@@ -623,26 +625,26 @@ export default function App() {
 
                   return (
                     <div key={group.id} className="rounded-lg overflow-hidden border transition-all duration-300" style={{
-                      borderColor: hasFailures ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)',
+                      borderColor: hasFailures ? 'rgba(239, 68, 68, 0.3)' : 'rgba(139, 197, 63, 0.3)',
                       background: hasFailures ? 'rgba(254, 242, 242, 0.5)' : 'rgba(240, 253, 244, 0.5)'
                     }}>
                       <div className="p-3 flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1">
                           <div
                             className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ background: hasFailures ? '#ef4444' : '#22c55e' }}
+                            style={{ background: hasFailures ? '#ef4444' : 'var(--ixl-green)' }}
                             title={hasFailures ? `${failCount} failed` : 'All successful'}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm" style={{ color: '#5a3519' }}>
+                              <span className="font-semibold text-sm" style={{ color: 'var(--ixl-text)' }}>
                                 {group.student_name}
                               </span>
-                              <span className="text-xs" style={{ color: '#8b7b6b' }}>
+                              <span className="text-xs" style={{ color: 'var(--ixl-gray-dark)' }}>
                                 • {group.items.length} skills
                               </span>
                             </div>
-                            <div className="text-xs" style={{ color: '#b5a594' }}>
+                            <div className="text-xs" style={{ color: 'var(--ixl-gray-dark)' }}>
                               {group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
@@ -651,8 +653,8 @@ export default function App() {
                           onClick={() => toggleBatch(group.id)}
                           className="px-3 py-1 rounded-md text-xs font-medium transition-all hover:opacity-80"
                           style={{
-                            background: 'rgba(139, 69, 19, 0.08)',
-                            color: '#6b4423'
+                            background: 'rgba(0, 174, 239, 0.1)',
+                            color: 'var(--ixl-turquoise-dark)'
                           }}
                         >
                           {isExpanded ? '▲ Hide' : '▼ Show'}
@@ -660,14 +662,14 @@ export default function App() {
                       </div>
 
                       {isExpanded && (
-                        <div className="border-t border-[rgba(139,69,19,0.08)] bg-white">
+                        <div className="border-t bg-white" style={{ borderColor: 'var(--ixl-gray)' }}>
                           {group.items.map((item) => (
-                            <div key={item.id} className="px-3 py-2 flex items-center gap-2 border-b border-[rgba(139,69,19,0.04)] last:border-0">
+                            <div key={item.id} className="px-3 py-2 flex items-center gap-2 border-b last:border-0" style={{ borderColor: 'var(--ixl-gray)' }}>
                               <div
                                 className="w-2 h-2 rounded-full flex-shrink-0"
-                                style={{ background: item.status === 'completed' ? '#22c55e' : '#ef4444' }}
+                                style={{ background: item.status === 'completed' ? 'var(--ixl-green)' : '#ef4444' }}
                               />
-                              <span className="text-sm flex-1" style={{ color: '#6b4423' }}>
+                              <span className="text-sm flex-1" style={{ color: 'var(--ixl-text)' }}>
                                 {item.skill_name}
                               </span>
                               {item.status !== 'completed' && item.error_message && (
