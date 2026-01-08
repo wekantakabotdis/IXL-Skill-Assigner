@@ -21,36 +21,36 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     console.log('Login API called');
     const success = await browser.login('', '');
-    
+
     console.log('Browser login returned:', success);
-    
+
     if (success) {
       const cookies = await browser.saveCookies();
       console.log('Sending success response to frontend');
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: 'Logged in successfully',
-        cookies 
+        cookies
       });
     } else {
       console.log('Sending failure response to frontend');
-      res.status(401).json({ 
-        success: false, 
-        error: 'Login cancelled or timed out' 
+      res.status(401).json({
+        success: false,
+        error: 'Login cancelled or timed out'
       });
     }
   } catch (error) {
     console.error('Login API error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
 app.get('/api/auth/status', (req, res) => {
-  res.json({ 
-    isAuthenticated: browser.isAuthenticated() 
+  res.json({
+    isAuthenticated: browser.isAuthenticated()
   });
 });
 
@@ -62,24 +62,24 @@ app.post('/api/sync/students', async (req, res) => {
 
     const page = browser.getPage();
     const students = await scrapeStudents(page);
-    
+
     console.log('Scraped students:', students.length);
-    
+
     if (students.length > 0) {
       db.updateStudents(students);
       console.log('Students saved to database');
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       count: students.length,
-      students 
+      students
     });
   } catch (error) {
     console.error('Sync students error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -87,27 +87,27 @@ app.post('/api/sync/students', async (req, res) => {
 app.post('/api/sync/skills', async (req, res) => {
   try {
     const { gradeLevel = '8' } = req.body;
-    
+
     if (!browser.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const page = browser.getPage();
     const skills = await scrapeSkills(page, gradeLevel);
-    
+
     if (skills.length > 0) {
       db.updateSkills(skills);
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       count: skills.length,
-      skills 
+      skills
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -136,11 +136,11 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/assign', async (req, res) => {
   try {
-    const { studentId, skillIds } = req.body;
+    const { studentId, skillIds, action = 'suggest' } = req.body;
 
     if (!studentId || !skillIds || skillIds.length === 0) {
-      return res.status(400).json({ 
-        error: 'studentId and skillIds are required' 
+      return res.status(400).json({
+        error: 'studentId and skillIds are required'
       });
     }
 
@@ -153,6 +153,7 @@ app.post('/api/assign', async (req, res) => {
       id: taskId,
       studentId,
       skillIds,
+      action,
       status: 'queued',
       progress: 0,
       total: skillIds.length,
@@ -166,10 +167,10 @@ app.post('/api/assign', async (req, res) => {
       processQueue();
     }
 
-    res.json({ 
-      taskId, 
+    res.json({
+      taskId,
       status: 'queued',
-      message: 'Assignment task created' 
+      message: 'Assignment task created'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -191,7 +192,7 @@ app.get('/api/history', (req, res) => {
   try {
     const { studentId, limit } = req.query;
     const history = db.getAssignmentHistory(
-      studentId ? parseInt(studentId) : null, 
+      studentId ? parseInt(studentId) : null,
       limit ? parseInt(limit) : 100
     );
     res.json(history);
@@ -220,7 +221,7 @@ app.get('/api/queue', (req, res) => {
       };
     });
 
-    res.json({ 
+    res.json({
       queue: queueWithDetails,
       allTasks: allTasks.filter(t => t.status !== 'queued')
     });
@@ -279,14 +280,15 @@ async function processQueue() {
       const gradeLevel = skills[0].grade_level || skills[0].gradeLevel;
       const page = browser.getPage();
 
-      console.log(`Assigning ${skillsData.length} skills to ${student.name} (Grade ${gradeLevel})`);
+      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${student.name} (Grade ${gradeLevel})`);
       console.log(`Skills: ${skillsData.map(s => s.skillCode).join(', ')}`);
 
       const results = await assignMultipleSkills(
-        page, 
-        skillsData, 
+        page,
+        skillsData,
         student.name,
         gradeLevel,
+        task.action,
         (progress) => {
           const currentTask = taskStatuses.get(task.id);
           taskStatuses.set(task.id, {

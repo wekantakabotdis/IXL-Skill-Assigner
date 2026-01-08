@@ -18,6 +18,7 @@ export default function App() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [rangeInput, setRangeInput] = useState('');
   const [gradeLevel, setGradeLevel] = useState('1');
+  const [actionMode, setActionMode] = useState('suggest');
 
   const [isAssigning, setIsAssigning] = useState(false);
   const [currentTask, setCurrentTask] = useState(null);
@@ -64,10 +65,10 @@ export default function App() {
 
     sortedHistory.forEach((item) => {
       const itemTime = new Date(item.assigned_at).getTime();
-      
-      if (currentGroup && 
-          currentGroup.student_id === item.student_id && 
-          Math.abs(currentGroup.timestamp - itemTime) < 60000) {
+
+      if (currentGroup &&
+        currentGroup.student_id === item.student_id &&
+        Math.abs(currentGroup.timestamp - itemTime) < 60000) {
         currentGroup.items.push(item);
       } else {
         if (currentGroup) groups.push(currentGroup);
@@ -120,10 +121,10 @@ export default function App() {
     try {
       console.log('Starting login process...');
       showNotification('info', 'Opening browser... Please log in manually in the browser window.');
-      
+
       const result = await api.login(username, password);
       console.log('Login result received:', result);
-      
+
       if (result.success) {
         console.log('Login successful, setting authenticated state...');
         setIsAuthenticated(true);
@@ -190,21 +191,21 @@ export default function App() {
   const handleGradeChange = async (newGrade, forceSync = false) => {
     setGradeLevel(newGrade);
     setRangeInput('');
-    
+
     try {
       showNotification('info', `Loading Grade ${newGrade} skills...`);
-      
+
       let skillsData = [];
       if (!forceSync) {
         skillsData = await api.getSkills(newGrade);
       }
-      
+
       if (skillsData.length === 0 || forceSync) {
         showNotification('info', `Syncing Grade ${newGrade} skills from IXL... Browser will navigate.`);
         console.log(`Syncing skills for grade ${newGrade}...`);
         const syncResult = await api.syncSkills(newGrade);
         console.log('Sync result:', syncResult);
-        
+
         if (syncResult.skills && syncResult.skills.length > 0) {
           setSkills(syncResult.skills);
           showNotification('success', `Loaded ${syncResult.skills.length} Grade ${newGrade} skills!`);
@@ -220,7 +221,7 @@ export default function App() {
       showNotification('error', 'Error loading skills: ' + error.message);
     }
   };
-  
+
   const handleForceSync = () => {
     handleGradeChange(gradeLevel, true);
   };
@@ -230,7 +231,7 @@ export default function App() {
       showNotification('info', 'Syncing students from IXL...');
       const syncResult = await api.syncStudents();
       console.log('Student sync result:', syncResult);
-      
+
       if (syncResult.success && syncResult.students) {
         setStudents(syncResult.students);
         showNotification('success', `Synced ${syncResult.students.length} students!`);
@@ -260,7 +261,7 @@ export default function App() {
     }
 
     const skillIds = parseRange(rangeInput, skills);
-    
+
     if (!skillIds || skillIds.length === 0) {
       const categories = [...new Set(skills.map(s => s.category))]
         .sort((a, b) => {
@@ -273,8 +274,8 @@ export default function App() {
     }
 
     try {
-      const result = await api.assignSkills(selectedStudent, skillIds);
-      
+      const result = await api.assignSkills(selectedStudent, skillIds, actionMode);
+
       if (result.taskId) {
         showNotification('success', `Task queued! ${skillIds.length} skills for assignment.`);
         setRangeInput('');
@@ -312,9 +313,9 @@ export default function App() {
               Begin by opening your browser to log in to IXL
             </p>
           </div>
-          
+
           <form onSubmit={handleLogin}>
-            <div className="mb-6 p-5 rounded-xl" style={{ 
+            <div className="mb-6 p-5 rounded-xl" style={{
               background: 'linear-gradient(135deg, rgba(193, 124, 91, 0.08) 0%, rgba(193, 124, 91, 0.04) 100%)',
               border: '1.5px solid rgba(193, 124, 91, 0.15)'
             }}>
@@ -378,11 +379,10 @@ export default function App() {
           <div className="flex gap-4 border-b border-[rgba(139,69,19,0.1)] pb-1">
             <button
               onClick={() => setCurrentView('assign')}
-              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${
-                currentView === 'assign'
+              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${currentView === 'assign'
                   ? 'text-[#5a3519] bg-[#fffaf5] border-t border-x border-[rgba(139,69,19,0.1)] shadow-[0_-2px_4px_rgba(139,69,19,0.02)]'
                   : 'text-[#8b7b6b] hover:bg-[rgba(139,69,19,0.03)]'
-              }`}
+                }`}
             >
               Assign Skills
             </button>
@@ -391,11 +391,10 @@ export default function App() {
                 setCurrentView('history');
                 loadHistory();
               }}
-              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${
-                currentView === 'history'
+              className={`px-6 py-3 rounded-t-xl font-semibold transition-all relative top-[1px] ${currentView === 'history'
                   ? 'text-[#5a3519] bg-[#fffaf5] border-t border-x border-[rgba(139,69,19,0.1)] shadow-[0_-2px_4px_rgba(139,69,19,0.02)]'
                   : 'text-[#8b7b6b] hover:bg-[rgba(139,69,19,0.03)]'
-              }`}
+                }`}
             >
               History
             </button>
@@ -446,7 +445,7 @@ export default function App() {
                 <button
                   onClick={handleForceSync}
                   className="px-5 py-3 rounded-xl text-sm font-semibold transition-all"
-                  style={{ 
+                  style={{
                     background: 'rgba(193, 124, 91, 0.1)',
                     color: '#8b5a3c',
                     border: '1.5px solid rgba(193, 124, 91, 0.2)'
@@ -472,6 +471,45 @@ export default function App() {
               onRangeChange={setRangeInput}
             />
 
+            <div className="mb-6">
+              <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
+                Action Mode
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActionMode('suggest')}
+                  className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all ${actionMode === 'suggest'
+                      ? 'bg-[#7d9d7c] text-white shadow-md'
+                      : 'bg-[rgba(125,157,124,0.1)] text-[#5a7a59] border border-[rgba(125,157,124,0.3)]'
+                    }`}
+                  style={{
+                    transform: actionMode === 'suggest' ? 'translateY(-1px)' : 'translateY(0)'
+                  }}
+                >
+                  ⭐ Suggest
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActionMode('stop_suggesting')}
+                  className={`flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all ${actionMode === 'stop_suggesting'
+                      ? 'bg-[#c17c5b] text-white shadow-md'
+                      : 'bg-[rgba(193,124,91,0.1)] text-[#8b5a3c] border border-[rgba(193,124,91,0.3)]'
+                    }`}
+                  style={{
+                    transform: actionMode === 'stop_suggesting' ? 'translateY(-1px)' : 'translateY(0)'
+                  }}
+                >
+                  ✕ Stop Suggesting
+                </button>
+              </div>
+              <p className="text-xs mt-2" style={{ color: '#b5a594' }}>
+                {actionMode === 'suggest'
+                  ? 'Skills will be suggested to the student (star selected)'
+                  : 'Skills will be un-suggested from the student (star deselected)'}
+              </p>
+            </div>
+
             <button
               onClick={handleAssign}
               disabled={!selectedStudent || !rangeInput.trim()}
@@ -481,14 +519,14 @@ export default function App() {
             </button>
 
             {(queueData.queue.length > 0 || queueData.allTasks.length > 0) && (
-              <div className="mt-8 p-6 rounded-xl" style={{ 
+              <div className="mt-8 p-6 rounded-xl" style={{
                 background: 'linear-gradient(135deg, rgba(125, 157, 124, 0.08) 0%, rgba(125, 157, 124, 0.04) 100%)',
                 border: '1.5px solid rgba(125, 157, 124, 0.2)'
               }}>
                 <h3 className="font-semibold text-lg mb-4" style={{ fontFamily: "'Crimson Pro', serif", color: '#6b4423' }}>
                   Assignment Queue
                 </h3>
-                
+
                 {queueData.allTasks.filter(t => t.status === 'processing').map(task => (
                   <div key={task.id} className="mb-3 p-4 rounded-xl paper-card">
                     <div className="flex justify-between items-center">
@@ -537,7 +575,7 @@ export default function App() {
               <h2 className="text-2xl font-semibold" style={{ fontFamily: "'Crimson Pro', serif", color: '#6b4423' }}>
                 Assignment History
               </h2>
-              <button 
+              <button
                 onClick={loadHistory}
                 className="text-sm font-medium hover:opacity-70 transition-opacity"
                 style={{ color: '#c17c5b' }}
@@ -566,14 +604,13 @@ export default function App() {
                       borderColor: 'rgba(139, 69, 19, 0.1)',
                       background: '#fffaf5'
                     }}>
-                      <div 
+                      <div
                         className="p-5 flex items-center justify-between cursor-pointer hover:bg-[rgba(139,69,19,0.03)] transition-colors"
                         onClick={() => toggleBatch(group.id)}
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-sm ${
-                            failCount > 0 ? 'bg-red-100 text-red-800' : 'bg-[#e6f4ea] text-[#1e4620]'
-                          }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-sm ${failCount > 0 ? 'bg-red-100 text-red-800' : 'bg-[#e6f4ea] text-[#1e4620]'
+                            }`}>
                             {group.student_name.charAt(0)}
                           </div>
                           <div>
@@ -581,7 +618,7 @@ export default function App() {
                               {group.student_name}
                             </div>
                             <div className="text-sm flex gap-3 mt-1" style={{ color: '#8b7b6b' }}>
-                              <span>{group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                              <span>{group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               <span>•</span>
                               <span>{group.items.length} skills assigned</span>
                             </div>

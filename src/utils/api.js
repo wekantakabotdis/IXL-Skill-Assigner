@@ -37,18 +37,18 @@ export const api = {
   },
 
   async getSkills(gradeLevel) {
-    const url = gradeLevel 
+    const url = gradeLevel
       ? `${API_URL}/skills?gradeLevel=${gradeLevel}`
       : `${API_URL}/skills`;
     const res = await fetch(url);
     return res.json();
   },
 
-  async assignSkills(studentId, skillIds) {
+  async assignSkills(studentId, skillIds, action = 'suggest') {
     const res = await fetch(`${API_URL}/assign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId, skillIds })
+      body: JSON.stringify({ studentId, skillIds, action })
     });
     return res.json();
   },
@@ -59,7 +59,7 @@ export const api = {
   },
 
   async getHistory(studentId, limit = 100) {
-    const url = studentId 
+    const url = studentId
       ? `${API_URL}/history?studentId=${studentId}&limit=${limit}`
       : `${API_URL}/history?limit=${limit}`;
     const res = await fetch(url);
