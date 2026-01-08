@@ -4,16 +4,53 @@ const fs = require('fs');
 
 class DB {
   constructor() {
-    const dbPath = path.join(__dirname, 'ixl-data.db');
+    // Determine the correct database path
+    let dbPath;
+    let schemaPath;
+
+    // Check if we're running in Electron
+    const isElectron = typeof process !== 'undefined' &&
+      process.versions &&
+      process.versions.electron;
+
+    if (isElectron) {
+      try {
+        const { app } = require('electron');
+
+        // Use app's user data directory for the database (writable)
+        const userDataPath = app.getPath('userData');
+        dbPath = path.join(userDataPath, 'ixl-data.db');
+
+        // Schema is in the asar archive (readable) or local in dev
+        if (app.isPackaged) {
+          schemaPath = path.join(app.getAppPath(), 'backend', 'database', 'schema.sql');
+        } else {
+          schemaPath = path.join(__dirname, 'schema.sql');
+        }
+
+        console.log('Electron mode - Database path:', dbPath);
+        console.log('Schema path:', schemaPath);
+      } catch (e) {
+        // Electron require failed, fall back to local
+        console.log('Electron import failed, using local paths');
+        dbPath = path.join(__dirname, 'ixl-data.db');
+        schemaPath = path.join(__dirname, 'schema.sql');
+      }
+    } else {
+      // Development/standalone Node.js
+      console.log('Node.js mode - using local database');
+      dbPath = path.join(__dirname, 'ixl-data.db');
+      schemaPath = path.join(__dirname, 'schema.sql');
+    }
+
     this.db = new Database(dbPath);
-    this.initializeSchema();
+    this.initializeSchema(schemaPath);
   }
 
-  initializeSchema() {
-    const schemaPath = path.join(__dirname, 'schema.sql');
+  initializeSchema(schemaPath) {
     const schema = fs.readFileSync(schemaPath, 'utf8');
     this.db.exec(schema);
-    
+
     try {
       this.db.exec('ALTER TABLE skills ADD COLUMN skill_code TEXT');
     } catch (e) {

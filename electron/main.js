@@ -1,10 +1,52 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
 const store = new Store();
 
 let mainWindow;
+
+async function startBackend() {
+  const isDev = !app.isPackaged;
+
+  if (isDev) {
+    console.log('Development mode - backend should be running separately');
+    return true;
+  }
+
+  console.log('=== Starting Backend Server ===');
+
+  try {
+    const appPath = app.getAppPath();
+    console.log('App path:', appPath);
+
+    const serverPath = path.join(appPath, 'backend', 'server.js');
+    console.log('Server path:', serverPath);
+
+    // Check if file exists
+    const fs = require('fs');
+    if (!fs.existsSync(serverPath)) {
+      const msg = `Backend server not found at: ${serverPath}`;
+      console.error(msg);
+      dialog.showErrorBox('Backend Error', msg);
+      return false;
+    }
+
+    // Set environment
+    process.env.NODE_ENV = 'production';
+
+    // Require and start the server (no chdir needed)
+    console.log('Loading server module...');
+    require(serverPath);
+    console.log('Backend server started on port 3001!');
+    return true;
+  } catch (error) {
+    const msg = `Failed to start backend: ${error.message}\n\nStack: ${error.stack}`;
+    console.error(msg);
+    dialog.showErrorBox('Backend Error', msg);
+    return false;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -14,8 +56,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
-    },
-    icon: path.join(__dirname, '../frontend/public/icon.png')
+    }
   });
 
   const isDev = !app.isPackaged;
@@ -24,7 +65,12 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5174');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    const appPath = app.getAppPath();
+    const indexPath = path.join(appPath, 'dist', 'index.html');
+    console.log('Loading:', indexPath);
+    mainWindow.loadFile(indexPath);
+    // Remove dev tools for production (add back for debugging)
+    // mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {
@@ -32,8 +78,18 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
+app.whenReady().then(async () => {
+  // Start backend first
+  const backendStarted = await startBackend();
+
+  if (!backendStarted && app.isPackaged) {
+    dialog.showErrorBox('Startup Error', 'Backend server failed to start. The app may not work correctly.');
+  }
+
+  // Give backend a moment to initialize
+  setTimeout(() => {
+    createWindow();
+  }, 2000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
