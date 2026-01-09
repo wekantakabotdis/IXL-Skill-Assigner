@@ -6,20 +6,27 @@ async function assignSkillFromNJSLAPage(page, skillData, studentName, action = '
     const actionVerb = action === 'suggest' ? 'Suggesting' : 'Un-suggesting';
     console.log(`${actionVerb} NJSLA skill ${skillCode} (ID: ${dataSkillId}) to ${studentName}...`);
 
-    const [sectionLetter, skillNum] = skillCode.split('.');
+    let [sectionLetter, skillNum] = skillCode.split('.');
 
     console.log(`Looking for skill in section "${sectionLetter}", number "${skillNum}"...`);
 
-    // Find the section by ID (e.g., section-A, section-B)
-    const section = page.locator(`section#section-${sectionLetter}, section.skill-plan-section`).filter({
-      has: page.locator(`.skill-plan-section-description:has-text("Sub-Claim ${sectionLetter}")`)
+    // Mapping for ELA sections (R -> Reading, W -> Writing)
+    let sectionName = sectionLetter;
+    if (sectionLetter === 'R') sectionName = 'Reading';
+    else if (sectionLetter === 'W') sectionName = 'Writing';
+
+    // Find the section by ID (e.g., section-A, section-Reading) or fallback
+    const section = page.locator(`section#section-${sectionName}, section.skill-plan-section`).filter({
+      has: page.locator(`.skill-plan-section-description, .skill-plan-section-name, .skill-plan-section-header`).filter({
+        hasText: new RegExp(`(Sub-Claim ${sectionLetter}|${sectionName})`, 'i')
+      })
     }).first();
 
     if (!await section.count()) {
       // Try alternative: look for section by ID directly
-      const altSection = page.locator(`section#section-${sectionLetter}`).first();
+      const altSection = page.locator(`section#section-${sectionName}`).first();
       if (!await altSection.count()) {
-        throw new Error(`Section "${sectionLetter}" not found on NJSLA page`);
+        throw new Error(`Section "${sectionName}" not found on NJSLA page`);
       }
     }
 

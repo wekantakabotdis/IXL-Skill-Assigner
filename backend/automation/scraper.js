@@ -225,11 +225,16 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
 
         if (!sectionLetter) {
           // Try to get from section description
-          const descEl = section.querySelector('.skill-plan-section-description');
+          const descEl = section.querySelector('.skill-plan-section-description, .skill-plan-section-name, .skill-plan-section-header');
           const descText = descEl?.textContent?.trim() || '';
+
           const match = descText.match(/Sub-Claim\s+([A-Z])/);
           if (match) {
             section._letter = match[1];
+          } else if (descText.toLowerCase().includes('reading')) {
+            section._letter = 'R';
+          } else if (descText.toLowerCase().includes('writing')) {
+            section._letter = 'W';
           } else {
             console.log('Could not determine section letter for:', descText);
             return;
