@@ -35,6 +35,8 @@ class IXLBrowser {
     });
 
     this.page = await this.context.newPage();
+    this.page.setDefaultTimeout(900000); // 15 minutes for any action
+    this.page.setDefaultNavigationTimeout(900000); // 15 minutes for navigation
     return this.page;
   }
 
@@ -54,7 +56,7 @@ class IXLBrowser {
       console.log('Please log in manually in the browser window that opened.');
 
       try {
-        await this.page.goto('https://www.ixl.com/signin/vsafuture', {
+        await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
           waitUntil: 'domcontentloaded'
         });
       } catch (navigationError) {
@@ -62,14 +64,14 @@ class IXLBrowser {
         // If navigation fails, the browser/page might be dead. Relaunch and try once more.
         await this.close();
         await this.launch();
-        await this.page.goto('https://www.ixl.com/signin/vsafuture', {
+        await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
           waitUntil: 'domcontentloaded'
         });
       }
 
       // Click on the username field to focus it for easy entry
       try {
-        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 30000 });
+        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 900000 });
         await this.page.click('input[name="username"], input#username, input[type="text"]');
         console.log('Focused on username field for easy entry.');
       } catch (e) {
