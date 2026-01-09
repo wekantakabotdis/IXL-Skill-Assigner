@@ -1,5 +1,205 @@
 const { humanDelay } = require('./delays');
 
+async function assignSkillFromNJSLAPage(page, skillData, studentName, action = 'suggest') {
+  try {
+    const { skillCode, dataSkillId } = skillData;
+    const actionVerb = action === 'suggest' ? 'Suggesting' : 'Un-suggesting';
+    console.log(`${actionVerb} NJSLA skill ${skillCode} (ID: ${dataSkillId}) to ${studentName}...`);
+
+    const [sectionLetter, skillNum] = skillCode.split('.');
+
+    console.log(`Looking for skill in section "${sectionLetter}", number "${skillNum}"...`);
+
+    // Find the section by ID (e.g., section-A, section-B)
+    const section = page.locator(`section#section-${sectionLetter}, section.skill-plan-section`).filter({
+      has: page.locator(`.skill-plan-section-description:has-text("Sub-Claim ${sectionLetter}")`)
+    }).first();
+
+    if (!await section.count()) {
+      // Try alternative: look for section by ID directly
+      const altSection = page.locator(`section#section-${sectionLetter}`).first();
+      if (!await altSection.count()) {
+        throw new Error(`Section "${sectionLetter}" not found on NJSLA page`);
+      }
+    }
+
+    // Find the skill by number in the section
+    // Skills are inside tables as numbered links
+    let skillLink = null;
+
+    // First try to find by data-skill attribute if we have a valid ID
+    if (dataSkillId && !dataSkillId.startsWith('njsla-')) {
+      skillLink = page.locator(`a.skill-tree-skill-link[data-skill="${dataSkillId}"]`).first();
+      if (await skillLink.count()) {
+        console.log(`Found skill by data-skill attribute`);
+      } else {
+        skillLink = null;
+      }
+    }
+
+    // If not found, search within the section
+    if (!skillLink) {
+      // Look for all skill links in the section and find the one with matching number
+      const sectionLocator = page.locator(`section#section-${sectionLetter}`);
+      const allSkillsInSection = await sectionLocator.locator('a.skill-tree-skill-link').all();
+
+      // The skills are numbered 1, 2, 3, etc. - find the one at position (skillNum - 1)
+      const skillIndex = parseInt(skillNum, 10) - 1;
+
+      if (skillIndex >= 0 && skillIndex < allSkillsInSection.length) {
+        skillLink = allSkillsInSection[skillIndex];
+        console.log(`Found skill at position ${skillNum} in section ${sectionLetter}`);
+      }
+    }
+
+    if (!skillLink) {
+      throw new Error(`Skill "${skillCode}" not found in section "${sectionLetter}"`);
+    }
+
+    // Get the parent li element which contains the suggestion icon
+    const skillContainer = skillLink.locator('xpath=ancestor::li').first();
+
+    await skillLink.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+
+    // Look for suggestion icon - it may be inside the li or near the link
+    let suggestionIcon = skillContainer.locator('.suggestion-toggle-icon').first();
+
+    if (!await suggestionIcon.count()) {
+      // Try finding it near the skill link
+      suggestionIcon = skillLink.locator('xpath=ancestor::*[contains(@class, "skill-tree-skill")]//span[contains(@class, "suggestion-toggle-icon")]').first();
+    }
+
+    if (!await suggestionIcon.count()) {
+      // Last resort - look within the row
+      suggestionIcon = skillLink.locator('xpath=ancestor::tr//*[contains(@class, "suggestion")]').first();
+    }
+
+    if (!await suggestionIcon.count()) {
+      throw new Error(`Suggestion icon not found for NJSLA skill ${skillCode}`);
+    }
+
+    console.log(`Hovering over suggestion icon...`);
+    await suggestionIcon.hover();
+    await page.waitForTimeout(1200);
+
+    const checkDropdown = async () => {
+      const hasModal = await page.locator('.suggested-skills-modal').isVisible().catch(() => false);
+      const hasText = await page.locator('text="Suggest this skill to"').isVisible().catch(() => false);
+      return hasModal || hasText;
+    };
+
+    let dropdownVisible = await checkDropdown();
+
+    if (!dropdownVisible) {
+      console.log('Dropdown not visible after hover, retrying hover...');
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(500);
+
+      await suggestionIcon.hover({ force: true });
+      await page.waitForTimeout(1200);
+      dropdownVisible = await checkDropdown();
+    }
+
+    if (!dropdownVisible) {
+      console.log('Still no dropdown, trying JavaScript hover simulation...');
+      await suggestionIcon.evaluate(el => {
+        const event = new MouseEvent('mouseover', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        el.dispatchEvent(event);
+      });
+      await page.waitForTimeout(1200);
+      dropdownVisible = await checkDropdown();
+    }
+
+    if (!dropdownVisible) {
+      throw new Error('Dropdown did not appear after multiple hover attempts.');
+    }
+
+    console.log('Dropdown detected, searching for student...');
+    console.log(`Looking for student "${studentName}" in dropdown...`);
+
+    const dropdownContent = page.locator('.suggested-skills-modal ul.entries').first();
+
+    let studentFound = false;
+    for (let scrollAttempt = 0; scrollAttempt < 25; scrollAttempt++) {
+      const studentRow = page.locator('li.entry-row').filter({ hasText: studentName }).first();
+
+      if (await studentRow.isVisible()) {
+        console.log(`Found "${studentName}", checking star state...`);
+
+        const starInRow = studentRow.locator('.suggestion-toggle-icon').first();
+
+        if (await starInRow.count() && await starInRow.isVisible()) {
+          const isCurrentlySelected = await starInRow.evaluate(el => {
+            const hasSelectedClass = el.classList.contains('selected') ||
+              el.classList.contains('active') ||
+              el.classList.contains('on') ||
+              el.classList.contains('suggested');
+            const hasAriaPressed = el.getAttribute('aria-pressed') === 'true';
+            const parentSelected = el.closest('.entry-row')?.classList.contains('suggested') ||
+              el.closest('.entry-row')?.classList.contains('selected');
+            const isFilled = el.querySelector('.filled, .active, .on') !== null ||
+              el.classList.contains('filled');
+            const dataSelected = el.getAttribute('data-selected') === 'true' ||
+              el.getAttribute('data-suggested') === 'true';
+            return hasSelectedClass || hasAriaPressed || parentSelected || isFilled || dataSelected;
+          });
+
+          console.log(`Star currently selected: ${isCurrentlySelected}, action: ${action}`);
+
+          const shouldClick = (action === 'suggest' && !isCurrentlySelected) ||
+            (action === 'stop_suggesting' && isCurrentlySelected);
+
+          if (shouldClick) {
+            console.log(`Clicking star to ${action}...`);
+            await starInRow.click();
+          } else {
+            console.log(`Star already in desired state (${action}), skipping click`);
+          }
+        } else {
+          console.log(`Star not found in row, trying to click student row...`);
+          await studentRow.click();
+        }
+
+        await page.waitForTimeout(800);
+        studentFound = true;
+        break;
+      }
+
+      if (await dropdownContent.count()) {
+        await dropdownContent.evaluate(el => el.scrollTop += 60);
+      }
+      await page.waitForTimeout(100);
+    }
+
+    if (!studentFound) {
+      throw new Error(`Student "${studentName}" not found in dropdown`);
+    }
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    console.log(`✓ Successfully ${action === 'suggest' ? 'suggested' : 'un-suggested'} NJSLA ${skillCode} for ${studentName}`);
+    return { success: true, skillCode, studentName, action };
+  } catch (error) {
+    console.error(`✗ Failed to assign NJSLA ${skillData.skillCode}: ${error.message}`);
+
+    await page.keyboard.press('Escape').catch(() => { });
+    await page.waitForTimeout(300);
+
+    return {
+      success: false,
+      skillCode: skillData.skillCode,
+      studentName,
+      error: error.message
+    };
+  }
+}
+
 async function assignSkillFromGradePage(page, skillData, studentName, action = 'suggest') {
   try {
     const { skillCode, dataSkillId } = skillData;
@@ -248,17 +448,36 @@ async function assignSkillFromGradePage(page, skillData, studentName, action = '
 
 async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, action = 'suggest', progressCallback, subject = 'math') {
   const results = [];
+  const isNJSLA = subject.startsWith('njsla-');
 
-  const gradeUrlMap = {
-    'pre-k': 'preschool',
-    'kindergarten': 'kindergarten',
-  };
-  const urlGrade = gradeUrlMap[gradeLevel] || gradeLevel;
-  const gradePageUrl = `https://www.ixl.com/${subject}/grade-${urlGrade}`;
+  let pageUrl;
+  let waitSelector;
 
-  console.log(`Navigating to ${subject} grade page: ${gradePageUrl}`);
-  await page.goto(gradePageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForSelector('.skill-tree-skill-node', { timeout: 15000 });
+  if (isNJSLA) {
+    // Build NJSLA skill plan URL
+    const baseSubject = subject.replace('njsla-', '');
+    let urlPath;
+    if (['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel)) {
+      urlPath = `njsla-${gradeLevel}`;
+    } else {
+      urlPath = `njsla-grade-${gradeLevel}`;
+    }
+    pageUrl = `https://www.ixl.com/${baseSubject}/skill-plans/${urlPath}`;
+    waitSelector = '.skill-plan-section';
+  } else {
+    // Build standard grade page URL
+    const gradeUrlMap = {
+      'pre-k': 'preschool',
+      'kindergarten': 'kindergarten',
+    };
+    const urlGrade = gradeUrlMap[gradeLevel] || gradeLevel;
+    pageUrl = `https://www.ixl.com/${subject}/grade-${urlGrade}`;
+    waitSelector = '.skill-tree-skill-node';
+  }
+
+  console.log(`Navigating to ${subject} page: ${pageUrl}`);
+  await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector(waitSelector, { timeout: 15000 });
   await page.waitForTimeout(3000);
 
   for (let i = 0; i < skillsData.length; i++) {
@@ -272,7 +491,10 @@ async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, a
       });
     }
 
-    const result = await assignSkillFromGradePage(page, skillData, studentName, action);
+    // Use appropriate assignment function based on subject type
+    const result = isNJSLA
+      ? await assignSkillFromNJSLAPage(page, skillData, studentName, action)
+      : await assignSkillFromGradePage(page, skillData, studentName, action);
     results.push(result);
 
     if (i < skillsData.length - 1) {
@@ -300,5 +522,6 @@ async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, a
 
 module.exports = {
   assignSkillFromGradePage,
+  assignSkillFromNJSLAPage,
   assignMultipleSkills
 };

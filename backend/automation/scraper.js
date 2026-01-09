@@ -180,7 +180,174 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
   }
 }
 
+async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math') {
+  try {
+    // Build the URL based on subject and grade
+    // njsla-math -> math, njsla-ela -> ela, njsla-science -> science
+    const baseSubject = subject.replace('njsla-', '');
+
+    // Handle special course names (algebra-1, geometry, algebra-2)
+    let urlPath;
+    if (['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel)) {
+      urlPath = `njsla-${gradeLevel}`;
+    } else {
+      urlPath = `njsla-grade-${gradeLevel}`;
+    }
+
+    const url = `https://www.ixl.com/${baseSubject}/skill-plans/${urlPath}`;
+
+    console.log(`Navigating to NJSLA ${baseSubject} grade ${gradeLevel} skills page: ${url}`);
+
+    await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
+
+    console.log('Waiting for skill plan sections to load...');
+    await page.waitForSelector('.skill-plan-section', { timeout: 15000 }).catch(() => {
+      console.log('skill-plan-section not found, waiting longer...');
+    });
+    await page.waitForTimeout(3000);
+
+    console.log('Extracting skill data from NJSLA skill plan page...');
+    const skills = await page.evaluate(({ grade, subj }) => {
+      const results = [];
+
+      // Find all section containers (A, B, C, D)
+      const sections = document.querySelectorAll('section.skill-plan-section');
+      console.log('Found sections:', sections.length);
+
+      sections.forEach((section) => {
+        // Get the section ID (e.g., "section-A")
+        const sectionId = section.id || '';
+        const sectionMatch = sectionId.match(/section-([A-Z])/);
+        const sectionLetter = sectionMatch ? sectionMatch[1] : null;
+
+        if (!sectionLetter) {
+          // Try to get from section description
+          const descEl = section.querySelector('.skill-plan-section-description');
+          const descText = descEl?.textContent?.trim() || '';
+          const match = descText.match(/Sub-Claim\s+([A-Z])/);
+          if (match) {
+            section._letter = match[1];
+          } else {
+            console.log('Could not determine section letter for:', descText);
+            return;
+          }
+        }
+
+        const letter = sectionLetter || section._letter;
+        if (!letter) return;
+
+        // Find all skill rows in this section
+        const rows = section.querySelectorAll('tbody tr');
+
+        rows.forEach((row) => {
+          // Each row may have multiple skills (numbered 1, 2, 3, etc.)
+          const skillLinks = row.querySelectorAll('a.skill-tree-skill-link');
+
+          skillLinks.forEach((link, skillIndex) => {
+            const skillName = link.textContent?.trim() || '';
+            const skillUrl = link.href || '';
+
+            // Find the skill number - look for the number in the parent li or from position
+            const parentLi = link.closest('li');
+            let skillNum = skillIndex + 1;
+
+            if (parentLi) {
+              // Try to find a number span
+              const numText = parentLi.textContent?.match(/^\s*(\d+)\./);
+              if (numText) {
+                skillNum = parseInt(numText[1], 10);
+              }
+            }
+
+            // Extract data-skill ID if available
+            const dataSkillId = link.getAttribute('data-skill') || `njsla-${letter}-${skillNum}`;
+
+            const skillCode = `${letter}.${skillNum}`;
+
+            results.push({
+              ixlId: dataSkillId,
+              skillCode: skillCode,
+              name: `${skillCode} ${skillName}`,
+              skillName: skillName,
+              category: letter,
+              gradeLevel: grade,
+              url: skillUrl,
+              displayOrder: skillNum,
+              subject: subj
+            });
+          });
+        });
+      });
+
+      // If no sections found, try alternative structure
+      if (results.length === 0) {
+        console.log('No sections found, trying alternative structure...');
+
+        // Try looking for skill links directly
+        const allLinks = document.querySelectorAll('a.skill-tree-skill-link');
+        let currentSection = 'A';
+        let skillNum = 1;
+
+        allLinks.forEach((link) => {
+          const skillName = link.textContent?.trim() || '';
+          const skillUrl = link.href || '';
+          const dataSkillId = link.getAttribute('data-skill') || `njsla-${currentSection}-${skillNum}`;
+
+          // Check if we're in a new section by looking at parent elements
+          const sectionEl = link.closest('.skill-plan-section');
+          if (sectionEl) {
+            const sectionId = sectionEl.id || '';
+            const match = sectionId.match(/section-([A-Z])/);
+            if (match && match[1] !== currentSection) {
+              currentSection = match[1];
+              skillNum = 1;
+            }
+          }
+
+          const skillCode = `${currentSection}.${skillNum}`;
+
+          results.push({
+            ixlId: dataSkillId,
+            skillCode: skillCode,
+            name: `${skillCode} ${skillName}`,
+            skillName: skillName,
+            category: currentSection,
+            gradeLevel: grade,
+            url: skillUrl,
+            displayOrder: skillNum,
+            subject: subj
+          });
+
+          skillNum++;
+        });
+      }
+
+      return results;
+    }, { grade: gradeLevel, subj: subject });
+
+    console.log('Found NJSLA skills:', skills.length);
+    if (skills.length > 0) {
+      console.log('Sample skills:', skills.slice(0, 5).map(s => `${s.skillCode} - ${s.skillName}`));
+      console.log('Sections found:', [...new Set(skills.map(s => s.category))].sort().join(', '));
+    }
+
+    if (skills.length === 0) {
+      console.warn('No NJSLA skills found! The page structure might have changed.');
+      console.log('Current URL:', page.url());
+    }
+
+    return skills;
+  } catch (error) {
+    console.error('Error scraping NJSLA skills:', error);
+    return [];
+  }
+}
+
 module.exports = {
   scrapeStudents,
-  scrapeSkills
+  scrapeSkills,
+  scrapeNJSLASkills
 };

@@ -7,6 +7,70 @@ import ProgressModal from './components/ProgressModal';
 import Notification from './components/Notification';
 import './index.css';
 
+// Helper function to get available grades based on subject
+const getAvailableGrades = (subject) => {
+  switch (subject) {
+    case 'njsla-math':
+      return [
+        { value: '3', label: 'Grade 3' },
+        { value: '4', label: 'Grade 4' },
+        { value: '5', label: 'Grade 5' },
+        { value: '6', label: 'Grade 6' },
+        { value: '7', label: 'Grade 7' },
+        { value: '8', label: 'Grade 8' },
+        { value: 'algebra-1', label: 'Algebra 1' },
+        { value: 'geometry', label: 'Geometry' },
+        { value: 'algebra-2', label: 'Algebra 2' },
+      ];
+    case 'njsla-ela':
+      return [
+        { value: '3', label: 'Grade 3' },
+        { value: '4', label: 'Grade 4' },
+        { value: '5', label: 'Grade 5' },
+        { value: '6', label: 'Grade 6' },
+        { value: '7', label: 'Grade 7' },
+        { value: '8', label: 'Grade 8' },
+        { value: '9', label: 'Grade 9' },
+        { value: '10', label: 'Grade 10' },
+        { value: '11', label: 'Grade 11' },
+      ];
+    case 'njsla-science':
+      return [
+        { value: '5', label: 'Grade 5' },
+        { value: '8', label: 'Grade 8' },
+      ];
+    default: // math, ela
+      return [
+        { value: 'pre-k', label: 'Pre-K' },
+        { value: 'kindergarten', label: 'Kindergarten' },
+        { value: '1', label: 'Grade 1' },
+        { value: '2', label: 'Grade 2' },
+        { value: '3', label: 'Grade 3' },
+        { value: '4', label: 'Grade 4' },
+        { value: '5', label: 'Grade 5' },
+        { value: '6', label: 'Grade 6' },
+        { value: '7', label: 'Grade 7' },
+        { value: '8', label: 'Grade 8' },
+        { value: '9', label: 'Grade 9' },
+        { value: '10', label: 'Grade 10' },
+        { value: '11', label: 'Grade 11' },
+        { value: '12', label: 'Grade 12' },
+      ];
+  }
+};
+
+// Helper to get display name for subject
+const getSubjectDisplayName = (subject) => {
+  switch (subject) {
+    case 'math': return 'Math';
+    case 'ela': return 'ELA';
+    case 'njsla-math': return 'NJSLA Math';
+    case 'njsla-ela': return 'NJSLA ELA';
+    case 'njsla-science': return 'NJSLA Science';
+    default: return subject;
+  }
+};
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
@@ -18,7 +82,7 @@ export default function App() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [rangeInput, setRangeInput] = useState('');
   const [subject, setSubject] = useState('math');
-  const [gradeLevel, setGradeLevel] = useState('1');
+  const [gradeLevel, setGradeLevel] = useState('3');
   const [actionMode, setActionMode] = useState('suggest');
 
   const [isAssigning, setIsAssigning] = useState(false);
@@ -174,8 +238,9 @@ export default function App() {
         const syncResult = await api.syncSkills(gradeLevel, subject);
         console.log('Skills sync result:', syncResult);
         if (syncResult.skills && syncResult.skills.length > 0) {
-          setSkills(syncResult.skills);
-          showNotification('success', `Loaded ${syncResult.skills.length} skills!`);
+          const updatedSkills = await api.getSkills(gradeLevel, subject);
+          setSkills(updatedSkills);
+          showNotification('success', `Loaded ${updatedSkills.length} skills!`);
         } else {
           showNotification('error', 'No skills found. Try clicking the Sync button.');
         }
@@ -208,8 +273,9 @@ export default function App() {
         console.log('Sync result:', syncResult);
 
         if (syncResult.skills && syncResult.skills.length > 0) {
-          setSkills(syncResult.skills);
-          showNotification('success', `Loaded ${syncResult.skills.length} Grade ${newGrade} skills!`);
+          const updatedSkills = await api.getSkills(newGrade, subject);
+          setSkills(updatedSkills);
+          showNotification('success', `Loaded ${updatedSkills.length} Grade ${newGrade} skills!`);
         } else {
           showNotification('error', `No skills found for Grade ${newGrade}. Check browser console for details.`);
         }
@@ -232,24 +298,32 @@ export default function App() {
     setRangeInput('');
     setSkills([]);
 
-    try {
-      showNotification('info', `Loading ${newSubject === 'ela' ? 'ELA' : 'Math'} skills...`);
+    // Reset grade to first available for this subject
+    const availableGrades = getAvailableGrades(newSubject);
+    const newGrade = availableGrades[0].value;
+    setGradeLevel(newGrade);
 
-      let skillsData = await api.getSkills(gradeLevel, newSubject);
+    const displayName = getSubjectDisplayName(newSubject);
+
+    try {
+      showNotification('info', `Loading ${displayName} skills...`);
+
+      let skillsData = await api.getSkills(newGrade, newSubject);
 
       if (skillsData.length === 0) {
-        showNotification('info', `Syncing ${newSubject === 'ela' ? 'ELA' : 'Math'} skills from IXL...`);
-        const syncResult = await api.syncSkills(gradeLevel, newSubject);
+        showNotification('info', `Syncing ${displayName} skills from IXL...`);
+        const syncResult = await api.syncSkills(newGrade, newSubject);
 
         if (syncResult.skills && syncResult.skills.length > 0) {
-          setSkills(syncResult.skills);
-          showNotification('success', `Loaded ${syncResult.skills.length} ${newSubject === 'ela' ? 'ELA' : 'Math'} skills!`);
+          const updatedSkills = await api.getSkills(newGrade, newSubject);
+          setSkills(updatedSkills);
+          showNotification('success', `Loaded ${updatedSkills.length} ${displayName} skills!`);
         } else {
-          showNotification('error', `No skills found for ${newSubject === 'ela' ? 'ELA' : 'Math'}. Try clicking the Sync button.`);
+          showNotification('error', `No skills found for ${displayName}. Try clicking the Sync button.`);
         }
       } else {
         setSkills(skillsData);
-        showNotification('success', `Loaded ${skillsData.length} ${newSubject === 'ela' ? 'ELA' : 'Math'} skills from cache.`);
+        showNotification('success', `Loaded ${skillsData.length} ${displayName} skills from cache.`);
       }
     } catch (error) {
       console.error('Error loading skills:', error);
@@ -463,6 +537,9 @@ export default function App() {
               >
                 <option value="math">📐 Math</option>
                 <option value="ela">📚 ELA (Language Arts)</option>
+                <option value="njsla-math">🔢 NJSLA Math</option>
+                <option value="njsla-ela">📖 NJSLA ELA</option>
+                <option value="njsla-science">🔬 NJSLA Science</option>
               </select>
             </div>
 
@@ -477,20 +554,9 @@ export default function App() {
                   className="input-field flex-1 px-4 py-3 rounded-xl text-base font-medium transition-all"
                   style={{ color: 'var(--ixl-text)' }}
                 >
-                  <option value="pre-k">Pre-K</option>
-                  <option value="kindergarten">Kindergarten</option>
-                  <option value="1">Grade 1</option>
-                  <option value="2">Grade 2</option>
-                  <option value="3">Grade 3</option>
-                  <option value="4">Grade 4</option>
-                  <option value="5">Grade 5</option>
-                  <option value="6">Grade 6</option>
-                  <option value="7">Grade 7</option>
-                  <option value="8">Grade 8</option>
-                  <option value="9">Grade 9</option>
-                  <option value="10">Grade 10</option>
-                  <option value="11">Grade 11</option>
-                  <option value="12">Grade 12</option>
+                  {getAvailableGrades(subject).map(grade => (
+                    <option key={grade.value} value={grade.value}>{grade.label}</option>
+                  ))}
                 </select>
                 <button
                   onClick={handleForceSync}

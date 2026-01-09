@@ -3,7 +3,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database/db');
 const IXLBrowser = require('./automation/browser');
-const { scrapeStudents, scrapeSkills } = require('./automation/scraper');
+const { scrapeStudents, scrapeSkills, scrapeNJSLASkills } = require('./automation/scraper');
 const { assignMultipleSkills } = require('./automation/assigner');
 
 const app = express();
@@ -93,7 +93,14 @@ app.post('/api/sync/skills', async (req, res) => {
     }
 
     const page = browser.getPage();
-    const skills = await scrapeSkills(page, gradeLevel, subject);
+
+    // Use NJSLA scraper for njsla-* subjects, regular scraper otherwise
+    let skills;
+    if (subject.startsWith('njsla-')) {
+      skills = await scrapeNJSLASkills(page, gradeLevel, subject);
+    } else {
+      skills = await scrapeSkills(page, gradeLevel, subject);
+    }
 
     if (skills.length > 0) {
       db.updateSkills(skills);
