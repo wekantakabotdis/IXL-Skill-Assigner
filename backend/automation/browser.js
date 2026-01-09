@@ -69,7 +69,7 @@ class IXLBrowser {
 
       // Click on the username field to focus it for easy entry
       try {
-        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 5000 });
+        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 30000 });
         await this.page.click('input[name="username"], input#username, input[type="text"]');
         console.log('Focused on username field for easy entry.');
       } catch (e) {
@@ -83,7 +83,7 @@ class IXLBrowser {
         () => {
           return !window.location.href.includes('signin');
         },
-        { timeout: 300000 } // 5 minutes timeout
+        { timeout: 900000 } // 15 minutes timeout
       );
 
       console.log('Login detected! Waiting a moment for page to settle...');

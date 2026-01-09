@@ -414,9 +414,11 @@ async function processQueue() {
   isProcessingQueue = false;
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`IXL Assignment Server running on http://localhost:${PORT}`);
 });
+
+server.timeout = 900000; // 15 minutes
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');

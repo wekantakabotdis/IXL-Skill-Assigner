@@ -169,36 +169,56 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
+  const loadSkills = async (grade, subj, forceSync = false) => {
+    if (!grade || !subj) return;
+
+    try {
+      showNotification('info', `Loading ${getSubjectDisplayName(subj)} Grade ${grade} skills...`);
+
+      let skillsData = [];
+      if (!forceSync) {
+        skillsData = await api.getSkills(grade, subj);
+      }
+
+      if (skillsData.length === 0 || forceSync) {
+        showNotification('info', `Syncing ${getSubjectDisplayName(subj)} skills from IXL... Browser will navigate.`);
+        const syncResult = await api.syncSkills(grade, subj);
+
+        if (syncResult.skills && syncResult.skills.length > 0) {
+          const updatedSkills = await api.getSkills(grade, subj);
+          setSkills(updatedSkills);
+          showNotification('success', `Loaded ${updatedSkills.length} ${getSubjectDisplayName(subj)} skills!`);
+        } else {
+          showNotification('error', `No skills found for Grade ${grade}. Check browser console for details.`);
+          setSkills([]);
+        }
+      } else {
+        setSkills(skillsData);
+        showNotification('success', `Loaded ${skillsData.length} ${getSubjectDisplayName(subj)} skills from cache.`);
+      }
+    } catch (error) {
+      console.error('Error loading skills:', error);
+      showNotification('error', 'Error loading skills: ' + error.message);
+      setSkills([]);
+    }
+  };
+
   useEffect(() => {
     const applyStudentDefaults = async () => {
       if (selectedStudent && students.length > 0) {
         const student = students.find(s => s.id === selectedStudent);
         if (student) {
-          // Check for saved defaults on student record
           const savedSubject = student.default_subject;
           const savedGrade = student.default_grade;
 
           if (savedSubject && savedGrade) {
-            // Validate that the grade is available for this subject
             const availableGrades = getAvailableGrades(savedSubject);
             const gradeIsValid = availableGrades.some(g => g.value === savedGrade);
 
             if (gradeIsValid) {
               setSubject(savedSubject);
               setGradeLevel(savedGrade);
-              showNotification('info', `Loaded ${getSubjectDisplayName(savedSubject)} Grade ${savedGrade} from student's last assignment`);
-
-              // Load skills for this subject/grade
-              try {
-                const skillsData = await api.getSkills(savedGrade, savedSubject);
-                if (skillsData.length > 0) {
-                  setSkills(skillsData);
-                } else {
-                  setSkills([]);
-                }
-              } catch (error) {
-                console.error('Error loading skills for student defaults:', error);
-              }
+              loadSkills(savedGrade, savedSubject);
             }
           }
         }
@@ -277,81 +297,19 @@ export default function App() {
     }
   };
 
-  const handleGradeChange = async (newGrade, forceSync = false) => {
+  const handleGradeChange = async (newGrade) => {
     setGradeLevel(newGrade);
-    setRangeInput('');
-
-    try {
-      showNotification('info', `Loading Grade ${newGrade} skills...`);
-
-      let skillsData = [];
-      if (!forceSync) {
-        skillsData = await api.getSkills(newGrade, subject);
-      }
-
-      if (skillsData.length === 0 || forceSync) {
-        showNotification('info', `Syncing Grade ${newGrade} ${subject} skills from IXL... Browser will navigate.`);
-        console.log(`Syncing ${subject} skills for grade ${newGrade}...`);
-        const syncResult = await api.syncSkills(newGrade, subject);
-        console.log('Sync result:', syncResult);
-
-        if (syncResult.skills && syncResult.skills.length > 0) {
-          const updatedSkills = await api.getSkills(newGrade, subject);
-          setSkills(updatedSkills);
-          showNotification('success', `Loaded ${updatedSkills.length} Grade ${newGrade} skills!`);
-        } else {
-          showNotification('error', `No skills found for Grade ${newGrade}. Check browser console for details.`);
-        }
-      } else {
-        setSkills(skillsData);
-        showNotification('success', `Loaded ${skillsData.length} Grade ${newGrade} skills from cache.`);
-      }
-    } catch (error) {
-      console.error('Error loading skills:', error);
-      showNotification('error', 'Error loading skills: ' + error.message);
-    }
+    loadSkills(newGrade, subject);
   };
 
   const handleForceSync = () => {
-    handleGradeChange(gradeLevel, true);
+    loadSkills(gradeLevel, subject, true);
   };
 
   const handleSubjectChange = async (newSubject) => {
     setSubject(newSubject);
-    setRangeInput('');
     setSkills([]);
-
-    // Reset grade to first available for this subject
-    const availableGrades = getAvailableGrades(newSubject);
-    const newGrade = availableGrades[0].value;
-    setGradeLevel(newGrade);
-
-    const displayName = getSubjectDisplayName(newSubject);
-
-    try {
-      showNotification('info', `Loading ${displayName} skills...`);
-
-      let skillsData = await api.getSkills(newGrade, newSubject);
-
-      if (skillsData.length === 0) {
-        showNotification('info', `Syncing ${displayName} skills from IXL...`);
-        const syncResult = await api.syncSkills(newGrade, newSubject);
-
-        if (syncResult.skills && syncResult.skills.length > 0) {
-          const updatedSkills = await api.getSkills(newGrade, newSubject);
-          setSkills(updatedSkills);
-          showNotification('success', `Loaded ${updatedSkills.length} ${displayName} skills!`);
-        } else {
-          showNotification('error', `No skills found for ${displayName}. Try clicking the Sync button.`);
-        }
-      } else {
-        setSkills(skillsData);
-        showNotification('success', `Loaded ${skillsData.length} ${displayName} skills from cache.`);
-      }
-    } catch (error) {
-      console.error('Error loading skills:', error);
-      showNotification('error', 'Error loading skills: ' + error.message);
-    }
+    setGradeLevel(null);
   };
 
   const handleSyncStudents = async () => {

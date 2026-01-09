@@ -11,6 +11,9 @@
     "build": "vite build",
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
+    "package:mac:x64": "npm run build && electron-builder --mac --x64",
+    "package:mac:arm64": "npm run build && electron-builder --mac --arm64",
+    "package:mac:all": "npm run build && electron-builder --mac --x64 --arm64",
     "package:win": "npm run build && electron-builder --win",
     "start": "electron ."
   },
@@ -22,7 +25,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^9.2.2",
+    "better-sqlite3": "^12.5.0",
     "cors": "^2.8.5",
     "electron-store": "^8.1.0",
     "express": "^4.18.2",
@@ -49,13 +52,17 @@
     "appId": "com.ixl.skill-assigner",
     "productName": "IXL Skill Assigner",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "electron/**/*",
       "backend/**/*",
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!dist/*.dmg",
+      "!dist/*.blockmap",
+      "!dist/mac/**/*",
+      "!dist/mac-arm64/**/*"
     ],
     "extraResources": [
       {

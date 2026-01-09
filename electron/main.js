@@ -19,6 +19,8 @@ async function startBackend() {
   try {
     const appPath = app.getAppPath();
     console.log('App path:', appPath);
+    console.log('__dirname:', __dirname);
+    console.log('process.resourcesPath:', process.resourcesPath);
 
     const serverPath = path.join(appPath, 'backend', 'server.js');
     console.log('Server path:', serverPath);
@@ -67,10 +69,17 @@ function createWindow() {
   } else {
     const appPath = app.getAppPath();
     const indexPath = path.join(appPath, 'dist', 'index.html');
-    console.log('Loading:', indexPath);
-    mainWindow.loadFile(indexPath);
-    // Remove dev tools for production (add back for debugging)
-    // mainWindow.webContents.openDevTools();
+    console.log('Loading UI from:', indexPath);
+
+    // Check if index.html exists
+    const fs = require('fs');
+    if (!fs.existsSync(indexPath)) {
+      const msg = `UI file not found at: ${indexPath}\n\nApp Path: ${appPath}\n__dirname: ${__dirname}\nResources: ${process.resourcesPath}`;
+      console.error(msg);
+      dialog.showErrorBox('Startup Error', msg);
+    } else {
+      mainWindow.loadFile(indexPath);
+    }
   }
 
   mainWindow.on('closed', () => {
