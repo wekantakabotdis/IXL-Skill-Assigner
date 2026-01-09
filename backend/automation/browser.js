@@ -39,17 +39,33 @@ class IXLBrowser {
   }
 
   async login(username, password) {
-    if (!this.page) {
-      await this.launch();
-    }
-
     try {
+      // Check if browser is actually connected
+      if (this.browser && !this.browser.isConnected()) {
+        console.log('Browser is disconnected, closing and relaunching...');
+        await this.close();
+      }
+
+      if (!this.page) {
+        await this.launch();
+      }
+
       console.log('Opening IXL login page...');
       console.log('Please log in manually in the browser window that opened.');
 
-      await this.page.goto('https://www.ixl.com/signin/vsafuture', {
-        waitUntil: 'domcontentloaded'
-      });
+      try {
+        await this.page.goto('https://www.ixl.com/signin/vsafuture', {
+          waitUntil: 'domcontentloaded'
+        });
+      } catch (navigationError) {
+        console.log('Navigation failed, trying to relaunch browser...', navigationError.message);
+        // If navigation fails, the browser/page might be dead. Relaunch and try once more.
+        await this.close();
+        await this.launch();
+        await this.page.goto('https://www.ixl.com/signin/vsafuture', {
+          waitUntil: 'domcontentloaded'
+        });
+      }
 
       // Click on the username field to focus it for easy entry
       try {
@@ -67,7 +83,7 @@ class IXLBrowser {
         () => {
           return !window.location.href.includes('signin');
         },
-        { timeout: 300000 }
+        { timeout: 300000 } // 5 minutes timeout
       );
 
       console.log('Login detected! Waiting a moment for page to settle...');
@@ -83,6 +99,10 @@ class IXLBrowser {
       return this.isLoggedIn;
     } catch (error) {
       console.error('Login error:', error);
+      // Ensure we clean up if something went totally wrong
+      if (error.message.includes('Target closed') || error.message.includes('browser has been closed')) {
+        await this.close();
+      }
       return false;
     }
   }

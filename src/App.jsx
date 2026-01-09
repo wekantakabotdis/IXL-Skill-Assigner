@@ -80,7 +80,7 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [skills, setSkills] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [rangeInput, setRangeInput] = useState('');
+  const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
   const [gradeLevel, setGradeLevel] = useState(null);
   const [actionMode, setActionMode] = useState('suggest');
@@ -378,8 +378,8 @@ export default function App() {
       return;
     }
 
-    if (!rangeInput.trim()) {
-      showNotification('error', 'Please enter a skill range (e.g., A.1-A.5)');
+    if (selectedSkillIds.length === 0) {
+      showNotification('error', 'Please select at least one skill');
       return;
     }
 
@@ -388,18 +388,7 @@ export default function App() {
       return;
     }
 
-    const skillIds = parseRange(rangeInput, skills);
-
-    if (!skillIds || skillIds.length === 0) {
-      const categories = [...new Set(skills.map(s => s.category))]
-        .sort((a, b) => {
-          if (a.length !== b.length) return a.length - b.length;
-          return a.localeCompare(b);
-        })
-        .join(', ');
-      showNotification('error', `No skills found for range "${rangeInput}". Available categories: ${categories}`);
-      return;
-    }
+    const skillIds = selectedSkillIds;
 
     try {
       const result = await api.assignSkills(selectedStudent, skillIds, actionMode);
@@ -417,7 +406,7 @@ export default function App() {
           console.error('Error saving student defaults:', error);
         }
 
-        setRangeInput('');
+        setSelectedSkillIds([]);
         setSelectedStudent(null);
         setSubject(null);
         setGradeLevel(null);
@@ -629,8 +618,8 @@ export default function App() {
 
             <SkillsSelector
               skills={skills}
-              rangeInput={rangeInput}
-              onRangeChange={setRangeInput}
+              selectedSkillIds={selectedSkillIds}
+              onSelectionChange={setSelectedSkillIds}
             />
 
             <div className="mb-6">
@@ -655,7 +644,7 @@ export default function App() {
 
             <button
               onClick={handleAssign}
-              disabled={!selectedStudent || !rangeInput.trim()}
+              disabled={!selectedStudent || selectedSkillIds.length === 0}
               className="btn-ink w-full py-5 rounded-xl font-semibold text-lg tracking-wide"
             >
               Add to Queue
