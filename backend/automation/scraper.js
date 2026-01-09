@@ -239,45 +239,38 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
         const letter = sectionLetter || section._letter;
         if (!letter) return;
 
+        // Initialize counter for this section
+        let skillCounter = 1;
+
         // Find all skill rows in this section
         const rows = section.querySelectorAll('tbody tr');
 
         rows.forEach((row) => {
-          // Each row may have multiple skills (numbered 1, 2, 3, etc.)
+          // Each row may have one or more skills
           const skillLinks = row.querySelectorAll('a.skill-tree-skill-link');
 
-          skillLinks.forEach((link, skillIndex) => {
+          skillLinks.forEach((link) => {
             const skillName = link.textContent?.trim() || '';
             const skillUrl = link.href || '';
 
-            // Find the skill number - look for the number in the parent li or from position
-            const parentLi = link.closest('li');
-            let skillNum = skillIndex + 1;
-
-            if (parentLi) {
-              // Try to find a number span
-              const numText = parentLi.textContent?.match(/^\s*(\d+)\./);
-              if (numText) {
-                skillNum = parseInt(numText[1], 10);
-              }
-            }
-
             // Extract data-skill ID if available
-            const dataSkillId = link.getAttribute('data-skill') || `njsla-${letter}-${skillNum}`;
+            const dataSkillId = link.getAttribute('data-skill') || `njsla-${letter}-${skillCounter}`;
 
-            const skillCode = `${letter}.${skillNum}`;
+            const skillCode = `${letter}.${skillCounter}`;
 
             results.push({
               ixlId: dataSkillId,
               skillCode: skillCode,
-              name: `${skillCode} ${skillName}`,
+              name: skillName, // Just the name, no code prefix
               skillName: skillName,
               category: letter,
               gradeLevel: grade,
               url: skillUrl,
-              displayOrder: skillNum,
+              displayOrder: skillCounter,
               subject: subj
             });
+
+            skillCounter++;
           });
         });
       });

@@ -39,9 +39,8 @@ async function assignSkillFromNJSLAPage(page, skillData, studentName, action = '
 
     // If not found, search within the section
     if (!skillLink) {
-      // Look for all skill links in the section and find the one with matching number
-      const sectionLocator = page.locator(`section#section-${sectionLetter}`);
-      const allSkillsInSection = await sectionLocator.locator('a.skill-tree-skill-link').all();
+      // Look for all skill links in the section we found earlier
+      const allSkillsInSection = await section.locator('a.skill-tree-skill-link').all();
 
       // The skills are numbered 1, 2, 3, etc. - find the one at position (skillNum - 1)
       const skillIndex = parseInt(skillNum, 10) - 1;

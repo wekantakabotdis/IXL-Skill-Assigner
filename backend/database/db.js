@@ -128,6 +128,13 @@ class DB {
     ).all(subject);
   }
 
+  deleteSkillsByGrade(gradeLevel, subject) {
+    const stmt = this.db.prepare(
+      'DELETE FROM skills WHERE grade_level = ? AND subject = ?'
+    );
+    return stmt.run(gradeLevel, subject);
+  }
+
   getSkillsByIds(ids) {
     const placeholders = ids.map(() => '?').join(',');
     return this.db.prepare(

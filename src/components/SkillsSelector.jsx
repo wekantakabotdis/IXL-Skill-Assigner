@@ -28,6 +28,13 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
   const getSkillLabel = (skill) => {
     const code = skill.skill_code || skill.skillCode || '';
     const skillName = skill.skillName || skill.name?.replace(/^[A-Z]+\.\d+\s*/, '') || '';
+    const subj = skill.subject || '';
+
+    // For NJSLA, don't include the A.1 - prefix
+    if (subj.startsWith('njsla-')) {
+      return skillName || skill.name || 'Unknown Skill';
+    }
+
     if (code && skillName) {
       return `${code} - ${skillName}`;
     }
@@ -54,10 +61,14 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     let list = sortedSkills.filter(s => !selectedSkillIds.includes(s.id));
     if (searchAvailable.trim()) {
       const term = searchAvailable.toLowerCase();
-      list = list.filter(s => getSkillLabel(s).toLowerCase().includes(term));
+      list = list.filter(s => {
+        const label = getSkillLabel(s).toLowerCase();
+        const code = (s.skill_code || s.skillCode || '').toLowerCase();
+        return label.includes(term) || code.includes(term);
+      });
     }
     return list;
-  }, [sortedSkills, selectedSkillIds, searchAvailable]);
+  }, [sortedSkills, selectedSkillIds, searchAvailable, getSkillLabel]);
 
   // Selected skills
   const selectedList = useMemo(() => {
@@ -67,10 +78,14 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
 
     if (searchSelected.trim()) {
       const term = searchSelected.toLowerCase();
-      return list.filter(s => getSkillLabel(s).toLowerCase().includes(term));
+      return list.filter(s => {
+        const label = getSkillLabel(s).toLowerCase();
+        const code = (s.skill_code || s.skillCode || '').toLowerCase();
+        return label.includes(term) || code.includes(term);
+      });
     }
     return list;
-  }, [skills, selectedSkillIds, searchSelected]);
+  }, [skills, selectedSkillIds, searchSelected, getSkillLabel]);
 
   // Handle highlighting for Available list
   const toggleHighlightAvailable = (id, multi, shift) => {

@@ -121,6 +121,7 @@ app.post('/api/sync/skills', async (req, res) => {
     }
 
     if (skills.length > 0) {
+      db.deleteSkillsByGrade(gradeLevel, subject);
       db.updateSkills(skills);
     }
 
