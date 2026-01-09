@@ -2,7 +2,7 @@ export default function StudentSelector({ students, selectedStudent, onSelect, o
   console.log('StudentSelector rendering with students:', students);
 
   return (
-    <div className="mb-6">
+    <div className="mb-6 flex flex-col">
       <label className="block text-sm font-semibold mb-3" style={{ color: '#6b4423' }}>
         Select Student
         <span className="ml-2 font-normal" style={{ color: '#b5a594' }}>

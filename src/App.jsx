@@ -522,8 +522,8 @@ export default function App() {
               onSync={handleSyncStudents}
             />
 
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
+            <div className="mb-6 flex flex-col">
+              <label className="text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
                 Subject
               </label>
               <select
@@ -580,8 +580,8 @@ export default function App() {
               onSelectionChange={setSelectedSkillIds}
             />
 
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
+            <div className="mb-6 flex flex-col">
+              <label className="text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
                 Action Mode
               </label>
               <select
