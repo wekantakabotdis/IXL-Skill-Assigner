@@ -239,16 +239,10 @@ export default function App() {
   const loadData = async () => {
     try {
       console.log('Loading data...');
-      const [studentsData, skillsData] = await Promise.all([
-        api.getStudents(),
-        api.getSkills(gradeLevel, subject)
-      ]);
 
+      // Load students from database
+      const studentsData = await api.getStudents();
       console.log('Received students data:', studentsData.length);
-      console.log('Received skills data:', skillsData.length, 'skills');
-      if (skillsData.length > 0) {
-        console.log('Sample skill:', skillsData[0]);
-      }
 
       if (studentsData.length === 0) {
         console.log('No students in DB, syncing from IXL...');
@@ -261,19 +255,19 @@ export default function App() {
         setStudents(studentsData);
       }
 
-      if (skillsData.length === 0) {
-        console.log('No skills in DB for grade', gradeLevel, '- syncing from IXL...');
-        showNotification('info', 'Syncing skills from IXL... Browser will navigate to grade page.');
-        const syncResult = await api.syncSkills(gradeLevel, subject);
-        console.log('Skills sync result:', syncResult);
-        if (syncResult.skills && syncResult.skills.length > 0) {
-          const updatedSkills = await api.getSkills(gradeLevel, subject);
-          setSkills(updatedSkills);
-          showNotification('success', `Loaded ${updatedSkills.length} skills!`);
-        } else {
-          showNotification('error', 'No skills found. Try clicking the Sync button.');
-        }
-      } else {
+      // Don't try to load skills on initial login - user needs to select subject and grade first
+      // Skills will be loaded when user selects a subject/grade
+      if (!subject || !gradeLevel) {
+        console.log('No subject/grade selected, skipping skills load');
+        showNotification('success', 'Ready! Select a student, subject, and grade to begin.');
+        return;
+      }
+
+      // Only load skills if subject and grade are selected
+      const skillsData = await api.getSkills(gradeLevel, subject);
+      console.log('Received skills data:', skillsData.length, 'skills');
+
+      if (skillsData.length > 0) {
         setSkills(skillsData);
         showNotification('success', `Loaded ${skillsData.length} skills from cache.`);
       }
@@ -437,6 +431,19 @@ export default function App() {
     }
   };
 
+  const handleAbort = async () => {
+    try {
+      const result = await api.abortTasks();
+      if (result.success) {
+        showNotification('info', result.message);
+      } else {
+        showNotification('error', 'Failed to abort tasks');
+      }
+    } catch (error) {
+      showNotification('error', 'Abort error: ' + error.message);
+    }
+  };
+
   useEffect(() => {
     if (queueData.allTasks.some(t => t.status === 'completed')) {
       loadHistory();
@@ -579,11 +586,11 @@ export default function App() {
                 style={{ color: 'var(--ixl-text)' }}
               >
                 <option value="">Select subject...</option>
-                <option value="math">📐 Math</option>
-                <option value="ela">📚 ELA (Language Arts)</option>
-                <option value="njsla-math">🔢 NJSLA Math</option>
-                <option value="njsla-ela">📖 NJSLA ELA</option>
-                <option value="njsla-science">🔬 NJSLA Science</option>
+                <option value="math">Math</option>
+                <option value="ela">ELA (Language Arts)</option>
+                <option value="njsla-math">NJSLA Math</option>
+                <option value="njsla-ela">NJSLA ELA</option>
+                <option value="njsla-science">NJSLA Science</option>
               </select>
             </div>
 
@@ -615,7 +622,7 @@ export default function App() {
                   title="Force re-sync skills from IXL website"
                   disabled={!subject || !gradeLevel}
                 >
-                  🔄 Sync
+                  Sync
                 </button>
               </div>
             </div>
@@ -636,8 +643,8 @@ export default function App() {
                 className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
                 style={{ color: 'var(--ixl-text)' }}
               >
-                <option value="suggest">⭐ Suggest</option>
-                <option value="stop_suggesting">✕ Stop Suggesting</option>
+                <option value="suggest">Suggest</option>
+                <option value="stop_suggesting">Stop Suggesting</option>
               </select>
               <p className="text-xs mt-2" style={{ color: 'var(--ixl-gray-dark)' }}>
                 {actionMode === 'suggest'
@@ -659,9 +666,22 @@ export default function App() {
                 background: 'linear-gradient(135deg, rgba(139, 197, 63, 0.08) 0%, rgba(139, 197, 63, 0.04) 100%)',
                 border: '1.5px solid rgba(139, 197, 63, 0.2)'
               }}>
-                <h3 className="font-semibold text-lg mb-4" style={{ color: 'var(--ixl-text)' }}>
-                  Assignment Queue
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-lg" style={{ color: 'var(--ixl-text)' }}>
+                    Assignment Queue
+                  </h3>
+                  <button
+                    onClick={handleAbort}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:opacity-80"
+                    style={{
+                      background: 'rgba(220, 38, 38, 0.1)',
+                      color: '#dc2626',
+                      border: '1.5px solid rgba(220, 38, 38, 0.2)'
+                    }}
+                  >
+                    Abort All
+                  </button>
+                </div>
 
                 {queueData.allTasks.filter(t => t.status === 'processing').map(task => (
                   <div key={task.id} className="mb-3 p-4 rounded-xl paper-card">

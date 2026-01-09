@@ -41,7 +41,7 @@ export default function StudentSelector({ students, selectedStudent, onSelect, o
           }}
           title="Sync students from IXL website"
         >
-          🔄 Sync
+          Sync
         </button>
       </div>
     </div>

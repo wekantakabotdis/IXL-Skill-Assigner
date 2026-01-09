@@ -255,6 +255,39 @@ app.get('/api/queue', (req, res) => {
   }
 });
 
+// Abort all tasks
+let abortRequested = false;
+
+app.post('/api/abort', (req, res) => {
+  try {
+    abortRequested = true;
+
+    // Clear the queue
+    const queuedCount = assignmentQueue.length;
+    assignmentQueue.length = 0;
+
+    // Mark any processing tasks as aborted
+    for (const [taskId, task] of taskStatuses.entries()) {
+      if (task.status === 'processing' || task.status === 'queued') {
+        task.status = 'aborted';
+        task.error = 'Aborted by user';
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Aborted. Cleared ${queuedCount} queued tasks.`
+    });
+
+    // Reset abort flag after a short delay to allow current operation to complete
+    setTimeout(() => {
+      abortRequested = false;
+    }, 1000);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 async function processQueue() {
   if (isProcessingQueue || assignmentQueue.length === 0) {
     return;
@@ -262,9 +295,19 @@ async function processQueue() {
 
   isProcessingQueue = true;
 
-  while (assignmentQueue.length > 0) {
+  while (assignmentQueue.length > 0 && !abortRequested) {
     const task = assignmentQueue.shift();
     taskStatuses.set(task.id, { ...task, status: 'processing' });
+
+    // Check if abort was requested before starting
+    if (abortRequested) {
+      taskStatuses.set(task.id, {
+        ...task,
+        status: 'aborted',
+        error: 'Aborted by user'
+      });
+      break;
+    }
 
     try {
       const student = db.getStudent(task.studentId);
@@ -323,8 +366,20 @@ async function processQueue() {
             currentSkill: progress.currentSkill
           });
         },
-        subject
+        subject,
+        () => abortRequested // Pass abort checker function
       );
+
+      // Check if aborted during assignment
+      if (abortRequested) {
+        taskStatuses.set(task.id, {
+          ...task,
+          status: 'aborted',
+          error: 'Aborted by user',
+          results
+        });
+        break;
+      }
 
       results.forEach((result, index) => {
         const skill = skills[index];

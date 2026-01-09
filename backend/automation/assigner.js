@@ -446,7 +446,7 @@ async function assignSkillFromGradePage(page, skillData, studentName, action = '
   }
 }
 
-async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, action = 'suggest', progressCallback, subject = 'math') {
+async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, action = 'suggest', progressCallback, subject = 'math', abortChecker = null) {
   const results = [];
   const isNJSLA = subject.startsWith('njsla-');
 
@@ -481,6 +481,12 @@ async function assignMultipleSkills(page, skillsData, studentName, gradeLevel, a
   await page.waitForTimeout(3000);
 
   for (let i = 0; i < skillsData.length; i++) {
+    // Check for abort request before each skill
+    if (abortChecker && abortChecker()) {
+      console.log('Abort requested, stopping skill assignment...');
+      break;
+    }
+
     const skillData = skillsData[i];
 
     if (progressCallback) {

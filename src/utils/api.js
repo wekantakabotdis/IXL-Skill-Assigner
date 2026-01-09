@@ -79,5 +79,12 @@ export const api = {
       body: JSON.stringify({ gradeLevel, subject })
     });
     return res.json();
+  },
+
+  async abortTasks() {
+    const res = await fetch(`${API_URL}/abort`, {
+      method: 'POST'
+    });
+    return res.json();
   }
 };

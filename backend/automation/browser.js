@@ -51,6 +51,15 @@ class IXLBrowser {
         waitUntil: 'domcontentloaded'
       });
 
+      // Click on the username field to focus it for easy entry
+      try {
+        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 5000 });
+        await this.page.click('input[name="username"], input#username, input[type="text"]');
+        console.log('Focused on username field for easy entry.');
+      } catch (e) {
+        console.log('Could not auto-focus username field:', e.message);
+      }
+
       console.log('Waiting for you to log in...');
       console.log('The app will detect when you are logged in.');
 
