@@ -8,6 +8,10 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
   const [highlightedAvailable, setHighlightedAvailable] = useState([]);
   const [highlightedSelected, setHighlightedSelected] = useState([]);
 
+  // Track last clicked item for Shift-click range selection
+  const [lastClickedAvailable, setLastClickedAvailable] = useState(null);
+  const [lastClickedSelected, setLastClickedSelected] = useState(null);
+
   // Track highlighted item for reordering (right list only)
   const [reorderSelectedId, setReorderSelectedId] = useState(null);
 
@@ -15,6 +19,8 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
   useEffect(() => {
     setHighlightedAvailable([]);
     setHighlightedSelected([]);
+    setLastClickedAvailable(null);
+    setLastClickedSelected(null);
     setReorderSelectedId(null);
   }, [skills]);
 
@@ -66,8 +72,34 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     return list;
   }, [skills, selectedSkillIds, searchSelected]);
 
-  // Handle highlighting
-  const toggleHighlightAvailable = (id, multi) => {
+  // Handle highlighting for Available list
+  const toggleHighlightAvailable = (id, multi, shift) => {
+    if (shift && lastClickedAvailable) {
+      // Range selection
+      const lastIndex = availableList.findIndex(s => s.id === lastClickedAvailable);
+      const currentIndex = availableList.findIndex(s => s.id === id);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+
+        const rangeIds = availableList.slice(start, end + 1).map(s => s.id);
+
+        // Merge with existing if multi (command) was held before, otherwise replace
+        // But typical Shift-click behavior extends selection from anchor
+        // Here we'll just check if we should add to existing or not.
+        // Usually shift-click adds to selection.
+
+        // Simple logic: Add range to current highlights
+        setHighlightedAvailable(prev => {
+          const newSet = new Set([...prev, ...rangeIds]);
+          return Array.from(newSet);
+        });
+        return; // Success, skip updating lastClicked
+      }
+    }
+
+    // Normal selection
     if (multi) {
       setHighlightedAvailable(prev =>
         prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -75,9 +107,31 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     } else {
       setHighlightedAvailable([id]);
     }
+    setLastClickedAvailable(id);
   };
 
-  const toggleHighlightSelected = (id, multi) => {
+  // Handle highlighting for Selected list
+  const toggleHighlightSelected = (id, multi, shift) => {
+    if (shift && lastClickedSelected) {
+      // Range selection
+      const lastIndex = selectedList.findIndex(s => s.id === lastClickedSelected);
+      const currentIndex = selectedList.findIndex(s => s.id === id);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+
+        const rangeIds = selectedList.slice(start, end + 1).map(s => s.id);
+
+        setHighlightedSelected(prev => {
+          const newSet = new Set([...prev, ...rangeIds]);
+          return Array.from(newSet);
+        });
+        setReorderSelectedId(null);
+        return;
+      }
+    }
+
     if (multi) {
       setHighlightedSelected(prev =>
         prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -87,6 +141,7 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
       setHighlightedSelected([id]);
       setReorderSelectedId(id);
     }
+    setLastClickedSelected(id);
   };
 
   // Operations
@@ -94,12 +149,14 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     if (highlightedAvailable.length === 0) return;
     onSelectionChange([...selectedSkillIds, ...highlightedAvailable]);
     setHighlightedAvailable([]);
+    setLastClickedAvailable(null);
   };
 
   const moveAllRight = () => {
     const idsToAdd = availableList.map(s => s.id);
     onSelectionChange([...selectedSkillIds, ...idsToAdd]);
     setHighlightedAvailable([]);
+    setLastClickedAvailable(null);
   };
 
   const moveLeft = () => {
@@ -107,6 +164,7 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     const newSelection = selectedSkillIds.filter(id => !highlightedSelected.includes(id));
     onSelectionChange(newSelection);
     setHighlightedSelected([]);
+    setLastClickedSelected(null);
     setReorderSelectedId(null);
   };
 
@@ -115,6 +173,7 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     const newSelection = selectedSkillIds.filter(id => !visibleIds.has(id));
     onSelectionChange(newSelection);
     setHighlightedSelected([]);
+    setLastClickedSelected(null);
     setReorderSelectedId(null);
   };
 
@@ -231,7 +290,7 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
                 <div
                   key={skill.id}
                   style={itemStyle(highlightedAvailable.includes(skill.id))}
-                  onClick={(e) => toggleHighlightAvailable(skill.id, e.metaKey || e.ctrlKey)}
+                  onClick={(e) => toggleHighlightAvailable(skill.id, e.metaKey || e.ctrlKey, e.shiftKey)}
                   onDoubleClick={moveRight}
                 >
                   {getSkillLabel(skill)}
@@ -303,7 +362,7 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
                 <div
                   key={skill.id}
                   style={itemStyle(highlightedSelected.includes(skill.id))}
-                  onClick={(e) => toggleHighlightSelected(skill.id, e.metaKey || e.ctrlKey)}
+                  onClick={(e) => toggleHighlightSelected(skill.id, e.metaKey || e.ctrlKey, e.shiftKey)}
                   onDoubleClick={moveLeft}
                 >
                   {getSkillLabel(skill)}
