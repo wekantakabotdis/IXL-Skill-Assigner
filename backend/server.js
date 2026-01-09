@@ -70,10 +70,13 @@ app.post('/api/sync/students', async (req, res) => {
       console.log('Students saved to database');
     }
 
+    // Return the updated list of students from the database (with IDs)
+    const updatedStudents = db.getStudents();
+
     res.json({
       success: true,
-      count: students.length,
-      students
+      count: updatedStudents.length,
+      students: updatedStudents
     });
   } catch (error) {
     console.error('Sync students error:', error);
@@ -125,10 +128,13 @@ app.post('/api/sync/skills', async (req, res) => {
       db.updateSkills(skills);
     }
 
+    // Return the updated list of skills from the database (with IDs)
+    const updatedSkills = db.getSkills(gradeLevel, subject);
+
     res.json({
       success: true,
-      count: skills.length,
-      skills
+      count: updatedSkills.length,
+      skills: updatedSkills
     });
   } catch (error) {
     res.status(500).json({
