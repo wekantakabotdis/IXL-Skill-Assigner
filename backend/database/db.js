@@ -62,6 +62,11 @@ class DB {
     }
 
     try {
+      this.db.exec('ALTER TABLE students ADD COLUMN default_subject TEXT');
+    } catch (e) {
+    }
+
+    try {
       this.db.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
     } catch (e) {
     }
@@ -96,6 +101,13 @@ class DB {
       }
     });
     transaction(students);
+  }
+
+  updateStudentDefaults(studentId, gradeLevel, subject) {
+    const stmt = this.db.prepare(
+      'UPDATE students SET default_grade = ?, default_subject = ? WHERE id = ?'
+    );
+    return stmt.run(gradeLevel, subject, studentId);
   }
 
   updateStudentDefaultGrade(studentId, gradeLevel) {

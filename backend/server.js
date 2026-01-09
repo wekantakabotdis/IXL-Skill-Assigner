@@ -84,6 +84,24 @@ app.post('/api/sync/students', async (req, res) => {
   }
 });
 
+// Update student defaults (subject and grade)
+app.post('/api/students/:id/defaults', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { gradeLevel, subject } = req.body;
+
+    db.updateStudentDefaults(id, gradeLevel, subject);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating student defaults:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.post('/api/sync/skills', async (req, res) => {
   try {
     const { gradeLevel = '8', subject = 'math' } = req.body;

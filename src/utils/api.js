@@ -70,5 +70,14 @@ export const api = {
   async getQueue() {
     const res = await fetch(`${API_URL}/queue`);
     return res.json();
+  },
+
+  async updateStudentDefaults(studentId, gradeLevel, subject) {
+    const res = await fetch(`${API_URL}/students/${studentId}/defaults`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gradeLevel, subject })
+    });
+    return res.json();
   }
 };

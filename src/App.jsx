@@ -81,8 +81,8 @@ export default function App() {
   const [skills, setSkills] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [rangeInput, setRangeInput] = useState('');
-  const [subject, setSubject] = useState('math');
-  const [gradeLevel, setGradeLevel] = useState('3');
+  const [subject, setSubject] = useState(null);
+  const [gradeLevel, setGradeLevel] = useState(null);
   const [actionMode, setActionMode] = useState('suggest');
 
   const [isAssigning, setIsAssigning] = useState(false);
@@ -170,13 +170,42 @@ export default function App() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (selectedStudent && students.length > 0) {
-      const student = students.find(s => s.id === selectedStudent);
-      if (student && student.default_grade && student.default_grade !== gradeLevel) {
-        showNotification('info', `Switching to Grade ${student.default_grade} based on student's history`);
-        handleGradeChange(student.default_grade);
+    const applyStudentDefaults = async () => {
+      if (selectedStudent && students.length > 0) {
+        const student = students.find(s => s.id === selectedStudent);
+        if (student) {
+          // Check for saved defaults on student record
+          const savedSubject = student.default_subject;
+          const savedGrade = student.default_grade;
+
+          if (savedSubject && savedGrade) {
+            // Validate that the grade is available for this subject
+            const availableGrades = getAvailableGrades(savedSubject);
+            const gradeIsValid = availableGrades.some(g => g.value === savedGrade);
+
+            if (gradeIsValid) {
+              setSubject(savedSubject);
+              setGradeLevel(savedGrade);
+              showNotification('info', `Loaded ${getSubjectDisplayName(savedSubject)} Grade ${savedGrade} from student's last assignment`);
+
+              // Load skills for this subject/grade
+              try {
+                const skillsData = await api.getSkills(savedGrade, savedSubject);
+                if (skillsData.length > 0) {
+                  setSkills(skillsData);
+                } else {
+                  setSkills([]);
+                }
+              } catch (error) {
+                console.error('Error loading skills for student defaults:', error);
+              }
+            }
+          }
+        }
       }
-    }
+    };
+
+    applyStudentDefaults();
   }, [selectedStudent, students]);
 
   const handleLogin = async (e) => {
@@ -383,8 +412,22 @@ export default function App() {
 
       if (result.taskId) {
         showNotification('success', `Task queued! ${skillIds.length} skills for assignment.`);
+
+        // Save student defaults for next time
+        try {
+          await api.updateStudentDefaults(selectedStudent, gradeLevel, subject);
+          // Refresh students to get updated defaults
+          const updatedStudents = await api.getStudents();
+          setStudents(updatedStudents);
+        } catch (error) {
+          console.error('Error saving student defaults:', error);
+        }
+
         setRangeInput('');
         setSelectedStudent(null);
+        setSubject(null);
+        setGradeLevel(null);
+        setSkills([]);
         loadHistory();
       } else {
         showNotification('error', 'Failed to start assignment');
@@ -530,11 +573,12 @@ export default function App() {
                 Subject
               </label>
               <select
-                value={subject}
-                onChange={(e) => handleSubjectChange(e.target.value)}
+                value={subject || ''}
+                onChange={(e) => e.target.value && handleSubjectChange(e.target.value)}
                 className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
                 style={{ color: 'var(--ixl-text)' }}
               >
+                <option value="">Select subject...</option>
                 <option value="math">📐 Math</option>
                 <option value="ela">📚 ELA (Language Arts)</option>
                 <option value="njsla-math">🔢 NJSLA Math</option>
@@ -549,12 +593,14 @@ export default function App() {
               </label>
               <div className="flex gap-3">
                 <select
-                  value={gradeLevel}
-                  onChange={(e) => handleGradeChange(e.target.value)}
+                  value={gradeLevel || ''}
+                  onChange={(e) => e.target.value && handleGradeChange(e.target.value)}
                   className="input-field flex-1 px-4 py-3 rounded-xl text-base font-medium transition-all"
                   style={{ color: 'var(--ixl-text)' }}
+                  disabled={!subject}
                 >
-                  {getAvailableGrades(subject).map(grade => (
+                  <option value="">Select grade...</option>
+                  {subject && getAvailableGrades(subject).map(grade => (
                     <option key={grade.value} value={grade.value}>{grade.label}</option>
                   ))}
                 </select>
@@ -567,6 +613,7 @@ export default function App() {
                     border: '1.5px solid rgba(0, 174, 239, 0.2)'
                   }}
                   title="Force re-sync skills from IXL website"
+                  disabled={!subject || !gradeLevel}
                 >
                   🔄 Sync
                 </button>
