@@ -80,6 +80,7 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [groups, setGroups] = useState([]);
   const [skills, setSkills] = useState([]);
+  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
@@ -173,6 +174,7 @@ export default function App() {
 
   const loadSkills = async (grade, subj, forceSync = false) => {
     if (!grade || !subj) return;
+    setIsLoadingSkills(true);
 
     try {
       showNotification('info', `Loading ${getSubjectDisplayName(subj)} Grade ${grade} skills...`);
@@ -202,6 +204,8 @@ export default function App() {
       console.error('Error loading skills:', error);
       showNotification('error', 'Error loading skills: ' + error.message);
       setSkills([]);
+    } finally {
+      setIsLoadingSkills(false);
     }
   };
 
@@ -623,6 +627,7 @@ export default function App() {
 
             <SkillsSelector
               skills={skills}
+              isLoading={isLoadingSkills}
               selectedSkillIds={selectedSkillIds}
               onSelectionChange={setSelectedSkillIds}
             />
