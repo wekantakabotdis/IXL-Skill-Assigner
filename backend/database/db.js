@@ -85,6 +85,14 @@ class DB {
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
         FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ixl_username TEXT UNIQUE NOT NULL,
+        ixl_password TEXT NOT NULL,
+        label TEXT,
+        last_used TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
   }
 
@@ -312,6 +320,30 @@ class DB {
       'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
     );
     return stmt.run(key, value);
+  }
+
+  // Account methods
+  getAccounts() {
+    return this.db.prepare('SELECT * FROM accounts ORDER BY last_used DESC, created_at DESC').all();
+  }
+
+  saveAccount(username, password, label) {
+    const stmt = this.db.prepare(`
+      INSERT INTO accounts (ixl_username, ixl_password, label) 
+      VALUES (?, ?, ?)
+      ON CONFLICT(ixl_username) DO UPDATE SET
+        ixl_password=excluded.ixl_password,
+        label=excluded.label
+    `);
+    return stmt.run(username, password, label || username);
+  }
+
+  deleteAccount(id) {
+    return this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+  }
+
+  updateAccountLastUsed(id) {
+    return this.db.prepare('UPDATE accounts SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   }
 
   close() {

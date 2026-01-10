@@ -19,13 +19,38 @@ let isProcessingQueue = false;
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    console.log('Login API called');
-    const success = await browser.login('', '');
+    const { username, password, headless, saveAccount } = req.body;
+    console.log('Login API called', { username, headless, saveAccount });
+
+    const success = await browser.login(username, password, headless);
 
     console.log('Browser login returned:', success);
 
     if (success) {
       const cookies = await browser.saveCookies();
+
+      if (saveAccount && username && password) {
+        console.log(`Saving account for ${username}...`);
+        try {
+          db.saveAccount(username, password);
+          console.log('Account saved successfully.');
+        } catch (dbError) {
+          console.error('Error saving account to DB:', dbError);
+        }
+      }
+
+      // Update last used if it was a saved account
+      try {
+        const accounts = db.getAccounts();
+        const matchedAccount = accounts.find(a => a.ixl_username === username);
+        if (matchedAccount) {
+          db.updateAccountLastUsed(matchedAccount.id);
+          console.log(`Updated last_used for account ${username}`);
+        }
+      } catch (updateError) {
+        console.error('Error updating last_used:', updateError);
+      }
+
       console.log('Sending success response to frontend');
       res.json({
         success: true,
@@ -48,10 +73,57 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Account management endpoints
+app.get('/api/accounts', (req, res) => {
+  try {
+    const accounts = db.getAccounts();
+    // Don't send passwords to frontend unless strictly necessary, 
+    // but here we need them to pass back for automated login.
+    // In a real app, we'd encrypt or handle this differently.
+    res.json(accounts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/accounts', (req, res) => {
+  try {
+    const { username, password, label } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    db.saveAccount(username, password, label);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/accounts/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.deleteAccount(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/auth/status', (req, res) => {
   res.json({
     isAuthenticated: browser.isAuthenticated()
   });
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    console.log('Logout API called');
+    await browser.close();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.post('/api/sync/students', async (req, res) => {

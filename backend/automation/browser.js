@@ -10,9 +10,9 @@ class IXLBrowser {
     this.isLoggedIn = false;
   }
 
-  async launch() {
+  async launch(headless = false) {
     this.browser = await chromium.launch({
-      headless: false,
+      headless: headless,
       channel: 'chrome',
       args: [
         '--disable-blink-features=AutomationControlled',
@@ -40,7 +40,7 @@ class IXLBrowser {
     return this.page;
   }
 
-  async login(username, password) {
+  async login(username, password, headless = false) {
     try {
       // Check if browser is actually connected
       if (this.browser && !this.browser.isConnected()) {
@@ -49,11 +49,10 @@ class IXLBrowser {
       }
 
       if (!this.page) {
-        await this.launch();
+        await this.launch(headless);
       }
 
       console.log('Opening IXL login page...');
-      console.log('Please log in manually in the browser window that opened.');
 
       try {
         await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
@@ -63,23 +62,62 @@ class IXLBrowser {
         console.log('Navigation failed, trying to relaunch browser...', navigationError.message);
         // If navigation fails, the browser/page might be dead. Relaunch and try once more.
         await this.close();
-        await this.launch();
+        await this.launch(headless);
         await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
           waitUntil: 'domcontentloaded'
         });
       }
 
-      // Click on the username field to focus it for easy entry
-      try {
-        await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 900000 });
-        await this.page.click('input[name="username"], input#username, input[type="text"]');
-        console.log('Focused on username field for easy entry.');
-      } catch (e) {
-        console.log('Could not auto-focus username field:', e.message);
-      }
+      // Automated login if credentials provided
+      if (username && password) {
+        console.log(`Attempting automated login for ${username}...`);
+        try {
+          await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 10000 });
+          await humanType(this.page, 'input[name="username"], input#username, input[type="text"]', username);
+          await this.page.waitForSelector('input[name="password"], input#password, input[type="password"]', { timeout: 10000 });
+          await humanType(this.page, 'input[name="password"], input#password, input[type="password"]', password);
 
-      console.log('Waiting for you to log in...');
-      console.log('The app will detect when you are logged in.');
+          // Click sign in button
+          const signInSelectors = [
+            'button[type="submit"]',
+            'input[type="submit"]',
+            '#signinbutton',
+            '.signin-button'
+          ];
+
+          let clicked = false;
+          for (const selector of signInSelectors) {
+            try {
+              if (await this.page.$(selector)) {
+                await humanClick(this.page, selector);
+                clicked = true;
+                break;
+              }
+            } catch (e) { }
+          }
+
+          if (!clicked) {
+            await this.page.keyboard.press('Enter');
+          }
+
+          console.log('Submitted login form. Waiting for navigation...');
+        } catch (e) {
+          console.log('Automated login entry failed, falling back to manual wait:', e.message);
+        }
+      } else {
+        // Click on the username field to focus it for easy entry
+        try {
+          await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 900000 });
+          await this.page.click('input[name="username"], input#username, input[type="text"]');
+          console.log('Focused on username field for easy entry.');
+        } catch (e) {
+          console.log('Could not auto-focus username field:', e.message);
+        }
+
+        console.log('Please log in manually in the browser window that opened.');
+        console.log('Waiting for you to log in...');
+        console.log('The app will detect when you are logged in.');
+      }
 
       await this.page.waitForFunction(
         () => {

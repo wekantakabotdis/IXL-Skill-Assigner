@@ -59,3 +59,13 @@ CREATE TABLE IF NOT EXISTS group_members (
   FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
+
+-- Accounts table
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ixl_username TEXT UNIQUE NOT NULL,
+  ixl_password TEXT NOT NULL,
+  label TEXT,
+  last_used TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

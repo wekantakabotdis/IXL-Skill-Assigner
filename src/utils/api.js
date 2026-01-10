@@ -8,16 +8,45 @@ if (window.electron && window.electron.getApiPort) {
   });
 }
 
-const getUrl = (path) => `http://localhost:${apiPort}/api${path}`;
+const BASE_URL = `http://localhost:${apiPort}/api`;
+const getUrl = (path) => `${BASE_URL}${path}`;
 
 export const api = {
-  async login(username, password) {
-    const res = await fetch(getUrl('/auth/login'), {
+  async login(username, password, headless = false, saveAccount = false) {
+    const response = await fetch(getUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, headless, saveAccount })
     });
-    return res.json();
+    return response.json();
+  },
+
+  async logout() {
+    const response = await fetch(getUrl('/auth/logout'), {
+      method: 'POST'
+    });
+    return response.json();
+  },
+
+  async getAccounts() {
+    const response = await fetch(getUrl('/accounts'));
+    return response.json();
+  },
+
+  async saveAccount(accountData) {
+    const response = await fetch(getUrl('/accounts'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accountData)
+    });
+    return response.json();
+  },
+
+  async deleteAccount(id) {
+    const response = await fetch(getUrl(`/accounts/${id}`), {
+      method: 'DELETE'
+    });
+    return response.json();
   },
 
   async getAuthStatus() {

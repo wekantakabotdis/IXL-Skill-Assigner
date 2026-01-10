@@ -82,6 +82,10 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [saveAccount, setSaveAccount] = useState(false);
+  const [isHeadless, setIsHeadless] = useState(false);
+  const [showHeadlessInfo, setShowHeadlessInfo] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [students, setStudents] = useState([]);
@@ -174,10 +178,44 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadHistory();
+    const fetchAccounts = async () => {
+      try {
+        const accounts = await api.getAccounts();
+        setSavedAccounts(accounts);
+
+        // Pre-fill with last used account if available and not already set
+        if (accounts.length > 0 && !username) {
+          const lastUsed = accounts[0]; // Ordered by last_used DESC in DB
+          if (lastUsed.last_used) {
+            setUsername(lastUsed.ixl_username);
+            setPassword(lastUsed.ixl_password);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching accounts:', error);
+      }
+    };
+    fetchAccounts();
+  }, []);
+
+  const handleDeleteAccount = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this account?')) return;
+    try {
+      await api.deleteAccount(id);
+      const accounts = await api.getAccounts();
+      setSavedAccounts(accounts);
+      showNotification('success', 'Account deleted');
+    } catch (error) {
+      showNotification('error', 'Error deleting account');
     }
-  }, [isAuthenticated]);
+  };
+
+  const handleSelectAccount = (account) => {
+    setUsername(account.ixl_username);
+    setPassword(account.ixl_password);
+    setSaveAccount(false); // Already saved
+  };
 
   const loadSkills = async (grade, subj, forceSync = false) => {
     if (!grade || !subj) return;
@@ -239,25 +277,31 @@ export default function App() {
         console.error('Error fetching group defaults:', error);
       }
     };
-
     applyGroupDefaults();
   }, [selectedStudentIds]);
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setIsLoggingIn(true);
 
     try {
-      console.log('Starting login process...');
-      showNotification('info', 'Opening browser... Please log in manually in the browser window.');
+      console.log('Starting login process...', { username, isHeadless, saveAccount });
+      showNotification('info', isHeadless ? 'Logging in (headless mode)...' : 'Opening browser...');
 
-      const result = await api.login(username, password);
+      const result = await api.login(username, password, isHeadless, saveAccount);
       console.log('Login result received:', result);
 
       if (result.success) {
         console.log('Login successful, setting authenticated state...');
         setIsAuthenticated(true);
         showNotification('success', 'Logged in successfully!');
+
+        // Refresh saved accounts list if we just saved one
+        if (saveAccount) {
+          const accounts = await api.getAccounts();
+          setSavedAccounts(accounts);
+        }
+
         await loadData();
       } else {
         console.error('Login failed:', result.error);
@@ -268,6 +312,27 @@ export default function App() {
       console.error('Login error caught:', error);
       showNotification('error', 'Login error: ' + error.message);
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!window.confirm('Are you sure you want to sign out? This will close any automated browser windows.')) return;
+
+    try {
+      showNotification('info', 'Signing out...');
+      const result = await api.logout();
+      if (result.success) {
+        setIsAuthenticated(false);
+        // Don't clear username/password so they are "autoloaded" for next login
+        // but we should refresh the accounts list
+        const accounts = await api.getAccounts();
+        setSavedAccounts(accounts);
+        showNotification('success', 'Signed out successfully');
+      } else {
+        showNotification('error', 'Logout failed: ' + result.error);
+      }
+    } catch (error) {
+      showNotification('error', 'Logout error: ' + error.message);
     }
   };
 
@@ -469,48 +534,181 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 relative">
+      <div className="min-h-screen flex items-center justify-center p-4 relative py-12">
         {/* IXL Header Bar */}
         <div className="fixed top-0 left-0 right-0 h-1 ixl-header-bar"></div>
 
-        <div className="paper-card rounded-2xl p-10 w-full max-w-lg relative z-10 animate-scaleIn">
-          <div className="text-center mb-8">
+        <div className="paper-card rounded-2xl p-8 w-full max-w-xl relative z-10 animate-scaleIn">
+          <div className="text-center mb-6">
             <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--ixl-green)' }}>
               IXL Skill Assigner
             </h1>
-            <p className="text-base mt-6" style={{ color: 'var(--ixl-gray-dark)' }}>
-              Begin by opening your browser to log in to IXL
-            </p>
           </div>
 
-          <form onSubmit={handleLogin}>
-            <div className="mb-6 p-5 rounded-xl" style={{
-              background: 'linear-gradient(135deg, rgba(0, 174, 239, 0.08) 0%, rgba(0, 174, 239, 0.04) 100%)',
-              border: '1.5px solid rgba(0, 174, 239, 0.2)'
-            }}>
-              <p className="text-sm font-semibold mb-3" style={{ color: 'var(--ixl-turquoise-dark)' }}>
-                Getting Started
-              </p>
-              <ol className="text-sm space-y-2 ml-5 list-decimal" style={{ color: 'var(--ixl-gray-dark)' }}>
-                <li>Click the button below to launch your browser</li>
-                <li>Log in to IXL with your teacher account</li>
-                <li>Return here once logged in</li>
-                <li>Start assigning skills to your students</li>
-              </ol>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--ixl-text)' }}>Saved Accounts</h2>
+              {savedAccounts.length === 0 ? (
+                <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 text-center text-sm text-gray-500">
+                  No saved accounts yet
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                  {savedAccounts.map(account => (
+                    <div
+                      key={account.id}
+                      onClick={() => handleSelectAccount(account)}
+                      className={`group p-3 rounded-xl border-2 cursor-pointer transition-all flex justify-between items-center ${username === account.ixl_username
+                        ? 'border-turquoise-500 bg-turquoise-50'
+                        : 'border-gray-100 hover:border-turquoise-200 bg-white'
+                        }`}
+                      style={{
+                        borderColor: username === account.ixl_username ? 'var(--ixl-turquoise)' : '',
+                        backgroundColor: username === account.ixl_username ? 'rgba(0, 174, 239, 0.05)' : ''
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm truncate" style={{ color: 'var(--ixl-text)' }}>
+                          {account.ixl_username}
+                        </div>
+                        {account.label && account.label !== account.ixl_username && (
+                          <div className="text-xs text-gray-500 truncate">{account.label}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteAccount(account.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-500 transition-all"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="btn-ink w-full py-4 rounded-xl font-semibold text-base tracking-wide"
-            >
-              {isLoggingIn ? 'Waiting for login...' : 'Open Browser & Login'}
-            </button>
-          </form>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--ixl-text)' }}>
+                {username ? 'Confirm Credentials' : 'Add New Account'}
+              </h2>
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-gray-600">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="input-field w-full px-4 py-2 rounded-lg text-sm"
+                  placeholder="IXL Username or Email"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-gray-600">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field w-full px-4 py-2 rounded-lg text-sm"
+                  placeholder="IXL Password"
+                  required
+                />
+              </div>
 
-          <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--ixl-gray)' }}>
-            <p className="text-xs text-center" style={{ color: 'var(--ixl-gray-dark)' }}>
-              Your credentials are sent directly to IXL and not stored
+              <div className="flex flex-col gap-2 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={saveAccount}
+                      onChange={(e) => setSaveAccount(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className="w-4 h-4 border-2 rounded transition-all flex items-center justify-center"
+                      style={{
+                        borderColor: saveAccount ? 'var(--ixl-turquoise)' : '#D1D5DB',
+                        backgroundColor: saveAccount ? 'var(--ixl-turquoise)' : 'transparent'
+                      }}
+                    >
+                      <svg
+                        className={`w-3 h-3 text-white transition-opacity ${saveAccount ? 'opacity-100' : 'opacity-0'}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800 transition-colors">Save credentials for next time</span>
+                </label>
+
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={isHeadless}
+                        onChange={(e) => setIsHeadless(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className="w-10 h-5 rounded-full transition-all relative"
+                        style={{ backgroundColor: isHeadless ? 'var(--ixl-turquoise)' : '#E5E7EB' }}
+                      >
+                        <div
+                          className="absolute top-[2px] bg-white rounded-full h-4 h-4 w-4 transition-all"
+                          style={{ left: isHeadless ? '22px' : '2px' }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800 transition-colors">Headless Mode</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowHeadlessInfo(!showHeadlessInfo)}
+                    className="text-gray-400 hover:text-turquoise-500 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {showHeadlessInfo && (
+                <div className="p-3 rounded-lg bg-gray-50 border border-gray-100 animate-fadeIn">
+                  <p className="text-[10px] leading-relaxed text-gray-500">
+                    <strong>Headless Mode</strong> runs the automated browser in the background. You won't see a browser window open, but the login and skill assignments will still happen. This is faster and uses fewer resources, but sometimes manual interaction is needed if IXL shows a captcha or unexpected security check.
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="btn-ink w-full py-3 rounded-xl font-semibold text-sm tracking-wide mt-2"
+              >
+                {isLoggingIn ? 'Logging in...' : 'Sign in to IXL'}
+              </button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => handleLogin()}
+                  className="text-xs text-gray-400 hover:text-turquoise-500 transition-colors"
+                >
+                  Or login manually in browser
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--ixl-gray)' }}>
+            <p className="text-[10px] text-center" style={{ color: 'var(--ixl-gray-dark)' }}>
+              Credentials are only stored locally in your database.
             </p>
           </div>
         </div>
@@ -567,6 +765,12 @@ export default function App() {
                 <span className="w-3 h-3 rounded-full status-dot" style={{ background: 'var(--ixl-green)' }}></span>
                 <span className="text-sm font-medium" style={{ color: 'var(--ixl-text)' }}>Connected</span>
               </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:bg-red-50 text-red-500 border border-red-100"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </header>
