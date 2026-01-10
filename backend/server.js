@@ -421,11 +421,27 @@ async function processQueue() {
   isProcessingQueue = false;
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`IXL Assignment Server running on http://localhost:${PORT}`);
-});
+const startServer = (port) => {
+  const server = app.listen(port, () => {
+    const actualPort = server.address().port;
+    process.env.BACKEND_PORT = actualPort;
+    console.log(`IXL Assignment Server running on http://localhost:${actualPort}`);
+  });
 
-server.timeout = 900000; // 15 minutes
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && port !== 0) {
+      console.log(`Port ${port} is in use, trying an available port...`);
+      startServer(0);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
+  server.timeout = 900000; // 15 minutes
+  return server;
+};
+
+const server = startServer(PORT);
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');

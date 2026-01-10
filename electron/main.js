@@ -1,8 +1,11 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
 const store = new Store();
+
+// Store backend port once started
+let backendPort = 3001;
 
 let mainWindow;
 
@@ -40,7 +43,17 @@ async function startBackend() {
     // Require and start the server (no chdir needed)
     console.log('Loading server module...');
     require(serverPath);
-    console.log('Backend server started on port 3001!');
+
+    // The server script sets process.env.BACKEND_PORT
+    // We'll update our local variable once it's set
+    const checkPort = setInterval(() => {
+      if (process.env.BACKEND_PORT) {
+        backendPort = parseInt(process.env.BACKEND_PORT);
+        console.log(`Backend port confirmed: ${backendPort}`);
+        clearInterval(checkPort);
+      }
+    }, 100);
+
     return true;
   } catch (error) {
     const msg = `Failed to start backend: ${error.message}\n\nStack: ${error.stack}`;
@@ -105,6 +118,29 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
+});
+
+// IPC Handlers
+ipcMain.handle('get-api-port', () => {
+  return backendPort;
+});
+
+ipcMain.handle('store-get', (event, key) => {
+  return store.get(key);
+});
+
+ipcMain.handle('store-set', (event, key, value) => {
+  store.set(key, value);
+});
+
+ipcMain.handle('store-delete', (event, key) => {
+  store.delete(key);
+});
+
+app.on('will-quit', async () => {
+  console.log('App is quitting, cleaning up resources...');
+  // The backend server is required in-process, so it shares this process
+  // We can emit a custom event or call a cleanup function if exported
 });
 
 app.on('window-all-closed', () => {

@@ -1,8 +1,18 @@
-const API_URL = 'http://localhost:3001/api';
+let apiPort = 3001;
+
+// Initialize port from Electron bridge if available
+if (window.electron && window.electron.getApiPort) {
+  window.electron.getApiPort().then(port => {
+    apiPort = port;
+    console.log(`Frontend API using port: ${apiPort}`);
+  });
+}
+
+const getUrl = (path) => `http://localhost:${apiPort}/api${path}`;
 
 export const api = {
   async login(username, password) {
-    const res = await fetch(`${API_URL}/auth/login`, {
+    const res = await fetch(getUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
@@ -11,19 +21,19 @@ export const api = {
   },
 
   async getAuthStatus() {
-    const res = await fetch(`${API_URL}/auth/status`);
+    const res = await fetch(getUrl('/auth/status'));
     return res.json();
   },
 
   async syncStudents() {
-    const res = await fetch(`${API_URL}/sync/students`, {
+    const res = await fetch(getUrl('/sync/students'), {
       method: 'POST'
     });
     return res.json();
   },
 
   async syncSkills(gradeLevel = '8', subject = 'math') {
-    const res = await fetch(`${API_URL}/sync/skills`, {
+    const res = await fetch(getUrl('/sync/skills'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gradeLevel, subject })
@@ -32,21 +42,21 @@ export const api = {
   },
 
   async getStudents() {
-    const res = await fetch(`${API_URL}/students`);
+    const res = await fetch(getUrl('/students'));
     return res.json();
   },
 
   async getSkills(gradeLevel, subject = 'math') {
-    let url = `${API_URL}/skills?subject=${subject}`;
+    let path = `/skills?subject=${subject}`;
     if (gradeLevel) {
-      url += `&gradeLevel=${gradeLevel}`;
+      path += `&gradeLevel=${gradeLevel}`;
     }
-    const res = await fetch(url);
+    const res = await fetch(getUrl(path));
     return res.json();
   },
 
   async assignSkills(studentId, skillIds, action = 'suggest') {
-    const res = await fetch(`${API_URL}/assign`, {
+    const res = await fetch(getUrl('/assign'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ studentId, skillIds, action })
@@ -55,25 +65,25 @@ export const api = {
   },
 
   async getAssignmentStatus(taskId) {
-    const res = await fetch(`${API_URL}/assign/${taskId}/status`);
+    const res = await fetch(getUrl(`/assign/${taskId}/status`));
     return res.json();
   },
 
   async getHistory(studentId, limit = 100) {
-    const url = studentId
-      ? `${API_URL}/history?studentId=${studentId}&limit=${limit}`
-      : `${API_URL}/history?limit=${limit}`;
-    const res = await fetch(url);
+    const path = studentId
+      ? `/history?studentId=${studentId}&limit=${limit}`
+      : `/history?limit=${limit}`;
+    const res = await fetch(getUrl(path));
     return res.json();
   },
 
   async getQueue() {
-    const res = await fetch(`${API_URL}/queue`);
+    const res = await fetch(getUrl('/queue'));
     return res.json();
   },
 
   async updateStudentDefaults(studentId, gradeLevel, subject) {
-    const res = await fetch(`${API_URL}/students/${studentId}/defaults`, {
+    const res = await fetch(getUrl(`/students/${studentId}/defaults`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gradeLevel, subject })
@@ -82,7 +92,7 @@ export const api = {
   },
 
   async abortTasks() {
-    const res = await fetch(`${API_URL}/abort`, {
+    const res = await fetch(getUrl('/abort'), {
       method: 'POST'
     });
     return res.json();
