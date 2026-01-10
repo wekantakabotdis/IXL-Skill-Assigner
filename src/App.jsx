@@ -39,6 +39,11 @@ const getAvailableGrades = (subject) => {
         { value: '5', label: 'Grade 5' },
         { value: '8', label: 'Grade 8' },
       ];
+    case 'njgpa-math':
+    case 'njgpa-ela':
+      return [
+        { value: 'njgpa', label: 'NJGPA Plan' },
+      ];
     default: // math, ela
       return [
         { value: 'pre-k', label: 'Pre-K' },
@@ -67,6 +72,8 @@ const getSubjectDisplayName = (subject) => {
     case 'njsla-math': return 'NJSLA Math';
     case 'njsla-ela': return 'NJSLA ELA';
     case 'njsla-science': return 'NJSLA Science';
+    case 'njgpa-math': return 'NJGPA Math';
+    case 'njgpa-ela': return 'NJGPA ELA';
     default: return subject;
   }
 };
@@ -324,6 +331,15 @@ export default function App() {
     setSkills([]);
     setGradeLevel(null);
     setSelectedSkillIds([]); // Reset skills when subject changes
+
+    // For NJGPA, there's only one "grade" (the whole plan), so auto-select it
+    if (newSubject.startsWith('njgpa-')) {
+      const grades = getAvailableGrades(newSubject);
+      if (grades.length === 1) {
+        setGradeLevel(grades[0].value);
+        loadSkills(grades[0].value, newSubject);
+      }
+    }
   };
 
   const handleStudentSelect = (ids, groupName = null) => {
@@ -574,22 +590,24 @@ export default function App() {
             />
 
             <div className="mb-6 flex flex-col">
-              <label className="text-sm font-semibold mb-3" style={{ color: 'var(--ixl-text)' }}>
-                Subject
-              </label>
-              <select
-                value={subject || ''}
-                onChange={(e) => e.target.value && handleSubjectChange(e.target.value)}
-                className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
-                style={{ color: 'var(--ixl-text)' }}
-              >
-                <option value="">Select subject...</option>
-                <option value="math">Math</option>
-                <option value="ela">ELA (Language Arts)</option>
-                <option value="njsla-math">NJSLA Math</option>
-                <option value="njsla-ela">NJSLA ELA</option>
-                <option value="njsla-science">NJSLA Science</option>
-              </select>
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold ml-1" style={{ color: 'var(--ixl-text)' }}>Subject</label>
+                <select
+                  value={subject || ''}
+                  onChange={(e) => e.target.value && handleSubjectChange(e.target.value)}
+                  className="input-field w-full px-4 py-3 rounded-xl text-base font-medium transition-all"
+                  style={{ color: 'var(--ixl-text)' }}
+                >
+                  <option value="">Select subject...</option>
+                  <option value="math">Math</option>
+                  <option value="ela">ELA</option>
+                  <option value="njsla-math">NJSLA Math</option>
+                  <option value="njsla-ela">NJSLA ELA</option>
+                  <option value="njsla-science">NJSLA Science</option>
+                  <option value="njgpa-math">NJGPA Math</option>
+                  <option value="njgpa-ela">NJGPA ELA</option>
+                </select>
+              </div>
             </div>
 
             <div className="mb-6">

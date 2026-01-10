@@ -197,20 +197,29 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
 async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math') {
   try {
     // Build the URL based on subject and grade
-    // njsla-math -> math, njsla-ela -> ela, njsla-science -> science
-    const baseSubject = subject.replace('njsla-', '');
+    const isNJGPA = subject.startsWith('njgpa-');
+    const isNJSLA = subject.startsWith('njsla-');
 
-    // Handle special course names (algebra-1, geometry, algebra-2)
-    let urlPath;
-    if (['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel)) {
-      urlPath = `njsla-${gradeLevel}`;
+    let baseSubject = 'math';
+    if (subject.includes('ela')) baseSubject = 'ela';
+    if (subject.includes('science')) baseSubject = 'science';
+
+    let url;
+    if (isNJGPA) {
+      const urlPath = subject === 'njgpa-ela' ? 'njgpa-english-language-arts' : 'njgpa-math';
+      url = `https://www.ixl.com/${baseSubject}/skill-plans/${urlPath}`;
     } else {
-      urlPath = `njsla-grade-${gradeLevel}`;
+      // Handle special course names (algebra-1, geometry, algebra-2)
+      let urlPath;
+      if (['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel)) {
+        urlPath = `njsla-${gradeLevel}`;
+      } else {
+        urlPath = `njsla-grade-${gradeLevel}`;
+      }
+      url = `https://www.ixl.com/${baseSubject}/skill-plans/${urlPath}`;
     }
 
-    const url = `https://www.ixl.com/${baseSubject}/skill-plans/${urlPath}`;
-
-    console.log(`Navigating to NJSLA ${baseSubject} grade ${gradeLevel} skills page: ${url}`);
+    console.log(`Navigating to ${subject} grade ${gradeLevel} skills page: ${url}`);
 
     await page.goto(url, {
       waitUntil: 'domcontentloaded',

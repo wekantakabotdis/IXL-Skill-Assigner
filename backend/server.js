@@ -164,9 +164,9 @@ app.post('/api/sync/skills', async (req, res) => {
 
     const page = browser.getPage();
 
-    // Use NJSLA scraper for njsla-* subjects, regular scraper otherwise
+    // Use skill plan scraper for NJSLA and NJGPA subjects, regular scraper otherwise
     let skills;
-    if (subject.startsWith('njsla-')) {
+    if (subject.startsWith('njsla-') || subject.startsWith('njgpa-')) {
       skills = await scrapeNJSLASkills(page, gradeLevel, subject);
     } else {
       skills = await scrapeSkills(page, gradeLevel, subject);
@@ -294,10 +294,10 @@ app.get('/api/queue', (req, res) => {
           ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
           : firstStudent?.name || 'Unknown'),
         skillCodes: skills.map(s => {
-          const isNJSLA = (s.subject || '').startsWith('njsla-');
+          const isPlanSub = (s.subject || '').startsWith('njsla-') || (s.subject || '').startsWith('njgpa-');
           const isBulleted = s.skill_code?.includes('.new') || !(s.skill_code?.match(/\.\d+$/));
 
-          if (isNJSLA || isBulleted) return s.name;
+          if (isPlanSub || isBulleted) return s.name;
           return s.skill_code || s.skillCode || s.name?.match(/^([A-Z]+\.\d+)/)?.[1];
         }).filter(Boolean)
       };
@@ -394,9 +394,10 @@ async function processQueue() {
           code = match ? match[1] : null;
         }
 
-        // For NJSLA, if code is still null, we might be able to use the displayOrder/letter logic
-        // But the scraper usually provides it. If not, use ID as fallback for code.
-        if (!code && (s.subject || '').startsWith('njsla-')) {
+        // For plan-based subjects (NJSLA, NJGPA), if code is still null, 
+        // use ID as fallback for code.
+        const isPlanSub = (s.subject || '').startsWith('njsla-') || (s.subject || '').startsWith('njgpa-');
+        if (!code && isPlanSub) {
           code = s.ixl_id;
         }
 

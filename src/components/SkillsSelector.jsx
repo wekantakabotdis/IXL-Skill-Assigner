@@ -30,8 +30,9 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     const skillName = skill.skillName || skill.name?.replace(/^[A-Z]+\.\d+\s*/, '') || '';
     const subj = skill.subject || '';
 
-    // For NJSLA or "new" (bulleted) skills, return the full name which may include "New!"
-    if (subj.startsWith('njsla-') || code.includes('.new')) {
+    // For NJSLA, NJGPA or "new" (bulleted) skills, return the full name which may include "New!"
+    const isPlanSub = subj.startsWith('njsla-') || subj.startsWith('njgpa-');
+    if (isPlanSub || code.includes('.new')) {
       return skill.name || skillName || 'Unknown Skill';
     }
 

@@ -89,13 +89,13 @@ async function getSuggestionIcon(skillNode) {
   return suggestionIcon;
 }
 
-async function assignSkill(page, skillData, studentNames, action = 'suggest', isNJSLA = false) {
+async function assignSkill(page, skillData, studentNames, action = 'suggest', isPlanBased = false) {
   const { skillCode, dataSkillId } = skillData;
   console.log(`Processing skill ${skillCode}...`);
 
   try {
     let skillNode;
-    if (isNJSLA) {
+    if (isPlanBased) {
       const [sectionLetter, skillNum] = skillCode.split('.');
       let sectionName = sectionLetter === 'R' ? 'Reading' : sectionLetter === 'W' ? 'Writing' : sectionLetter;
 
@@ -184,13 +184,21 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
 
 async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, action = 'suggest', progressCallback, subject = 'math', abortChecker = null) {
   const allResults = [];
-  const isNJSLA = subject.startsWith('njsla-');
+  const isPlanBased = subject.startsWith('njsla-') || subject.startsWith('njgpa-');
 
   let pageUrl;
-  if (isNJSLA) {
-    const baseSub = subject.replace('njsla-', '');
-    const urlPath = ['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel) ? `njsla-${gradeLevel}` : `njsla-grade-${gradeLevel}`;
-    pageUrl = `https://www.ixl.com/${baseSub}/skill-plans/${urlPath}`;
+  if (isPlanBased) {
+    let baseSub = 'math';
+    if (subject.includes('ela')) baseSub = 'ela';
+    if (subject.includes('science')) baseSub = 'science';
+
+    if (subject.startsWith('njgpa-')) {
+      const urlPath = subject === 'njgpa-ela' ? 'njgpa-english-language-arts' : 'njgpa-math';
+      pageUrl = `https://www.ixl.com/${baseSub}/skill-plans/${urlPath}`;
+    } else {
+      const urlPath = ['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel) ? `njsla-${gradeLevel}` : `njsla-grade-${gradeLevel}`;
+      pageUrl = `https://www.ixl.com/${baseSub}/skill-plans/${urlPath}`;
+    }
   } else {
     const gradeUrlMap = { 'pre-k': 'preschool', 'kindergarten': 'kindergarten' };
     pageUrl = `https://www.ixl.com/${subject}/grade-${gradeUrlMap[gradeLevel] || gradeLevel}`;
@@ -203,10 +211,10 @@ async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, 
   for (let i = 0; i < skillsData.length; i++) {
     if (abortChecker && abortChecker()) break;
     const skill = skillsData[i];
-    const displayName = isNJSLA ? (skill.skillName || skill.skillCode) : skill.skillCode;
+    const displayName = isPlanBased ? (skill.skillName || skill.skillCode) : skill.skillCode;
     if (progressCallback) progressCallback({ current: i, total: skillsData.length, currentSkill: displayName });
 
-    const skillResults = await assignSkill(page, skill, studentNames, action, isNJSLA);
+    const skillResults = await assignSkill(page, skill, studentNames, action, isPlanBased);
     allResults.push(...skillResults);
 
     if (i < skillsData.length - 1) await page.waitForTimeout(100); // Fixed 100ms instead of humanDelay
