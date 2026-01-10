@@ -151,5 +151,19 @@ export const api = {
       method: 'DELETE'
     });
     return res.json();
+  },
+
+  async getSetting(key) {
+    const res = await fetch(getUrl(`/settings/${key}`));
+    return res.json();
+  },
+
+  async saveSetting(key, value) {
+    const res = await fetch(getUrl('/settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    return res.json();
   }
 };

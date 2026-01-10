@@ -109,6 +109,30 @@ app.delete('/api/accounts/:id', (req, res) => {
   }
 });
 
+// Settings endpoints
+app.get('/api/settings/:key', (req, res) => {
+  try {
+    const { key } = req.params;
+    const value = db.getSetting(key);
+    res.json({ key, value });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { key, value } = req.body;
+    if (!key) {
+      return res.status(400).json({ error: 'Key is required' });
+    }
+    db.setSetting(key, String(value));
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/auth/status', (req, res) => {
   res.json({
     isAuthenticated: browser.isAuthenticated()

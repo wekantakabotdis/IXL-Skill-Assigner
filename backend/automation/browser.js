@@ -42,15 +42,12 @@ class IXLBrowser {
 
   async login(username, password, headless = false) {
     try {
-      // Check if browser is actually connected
-      if (this.browser && !this.browser.isConnected()) {
-        console.log('Browser is disconnected, closing and relaunching...');
-        await this.close();
-      }
+      // Always close any existing browser process before a fresh login attempt
+      // to ensure a clean state and prevent "stuck" situations.
+      console.log('Ensuring clean state for fresh login...');
+      await this.close();
 
-      if (!this.page) {
-        await this.launch(headless);
-      }
+      await this.launch(headless);
 
       console.log('Opening IXL login page...');
 
@@ -59,8 +56,7 @@ class IXLBrowser {
           waitUntil: 'domcontentloaded'
         });
       } catch (navigationError) {
-        console.log('Navigation failed, trying to relaunch browser...', navigationError.message);
-        // If navigation fails, the browser/page might be dead. Relaunch and try once more.
+        console.log('Navigation failed, trying once more...', navigationError.message);
         await this.close();
         await this.launch(headless);
         await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
@@ -72,77 +68,57 @@ class IXLBrowser {
       if (username && password) {
         console.log(`Attempting automated login for ${username}...`);
         try {
-          await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 10000 });
-          await humanType(this.page, 'input[name="username"], input#username, input[type="text"]', username);
-          await this.page.waitForSelector('input[name="password"], input#password, input[type="password"]', { timeout: 10000 });
-          await humanType(this.page, 'input[name="password"], input#password, input[type="password"]', password);
+          // Fast check for username field
+          await this.page.waitForSelector('input[name="username"], input#username', { timeout: 15000 });
+          await humanType(this.page, 'input[name="username"], input#username', username);
+          await this.page.waitForSelector('input[name="password"], input#password', { timeout: 5000 });
+          await humanType(this.page, 'input[name="password"], input#password', password);
 
-          // Click sign in button
-          const signInSelectors = [
-            'button[type="submit"]',
-            'input[type="submit"]',
-            '#signinbutton',
-            '.signin-button'
-          ];
-
-          let clicked = false;
-          for (const selector of signInSelectors) {
-            try {
-              if (await this.page.$(selector)) {
-                await humanClick(this.page, selector);
-                clicked = true;
-                break;
-              }
-            } catch (e) { }
-          }
-
-          if (!clicked) {
-            await this.page.keyboard.press('Enter');
-          }
-
-          console.log('Submitted login form. Waiting for navigation...');
+          await this.page.keyboard.press('Enter');
+          console.log('Submitted login form. Waiting for authentication...');
         } catch (e) {
           console.log('Automated login entry failed, falling back to manual wait:', e.message);
         }
       } else {
-        // Click on the username field to focus it for easy entry
+        // Just focus the field and wait for manual login
         try {
-          await this.page.waitForSelector('input[name="username"], input#username, input[type="text"]', { timeout: 900000 });
-          await this.page.click('input[name="username"], input#username, input[type="text"]');
-          console.log('Focused on username field for easy entry.');
-        } catch (e) {
-          console.log('Could not auto-focus username field:', e.message);
-        }
-
-        console.log('Please log in manually in the browser window that opened.');
-        console.log('Waiting for you to log in...');
-        console.log('The app will detect when you are logged in.');
+          await this.page.waitForSelector('input[name="username"], input#username', { timeout: 10000 });
+          await this.page.click('input[name="username"], input#username');
+        } catch (e) { }
+        console.log('Please log in manually or via automation in the opened window.');
       }
 
-      await this.page.waitForFunction(
-        () => {
-          return !window.location.href.includes('signin');
-        },
-        { timeout: 900000 } // 15 minutes timeout
-      );
+      // Wait for navigation away from signin page
+      // Use both URL check AND navigation events for maximum speed/reliability
+      await Promise.race([
+        this.page.waitForFunction(() => !window.location.href.includes('signin'), { timeout: 900000 }),
+        this.page.waitForURL(url => !url.href.includes('signin'), { timeout: 900000 })
+      ]);
 
-      console.log('Login detected! Waiting a moment for page to settle...');
-      await this.page.waitForTimeout(3000);
+      console.log('Login detected! Settle check...');
+
+      // Instead of hard 3s wait, wait for a short bit or till network is relatively quiet
+      try {
+        await Promise.race([
+          this.page.waitForLoadState('networkidle', { timeout: 2000 }),
+          this.page.waitForTimeout(1000)
+        ]);
+      } catch (e) {
+        // If networkidle times out, that's fine, we proceed anyway
+      }
 
       const currentUrl = this.page.url();
-      console.log('Current URL after login:', currentUrl);
-
-      this.isLoggedIn = currentUrl.includes('ixl.com') &&
-        !currentUrl.includes('signin');
+      this.isLoggedIn = currentUrl.includes('ixl.com') && !currentUrl.includes('signin');
 
       console.log('Login successful:', this.isLoggedIn);
       return this.isLoggedIn;
     } catch (error) {
-      console.error('Login error:', error);
-      // Ensure we clean up if something went totally wrong
-      if (error.message.includes('Target closed') || error.message.includes('browser has been closed')) {
-        await this.close();
+      console.error('Login error:', error.message);
+      // If the target was closed by user, ensure we clean up and return false promptly
+      if (error.message.includes('Target closed') || error.message.includes('closed')) {
+        console.log('Browser window was closed by user.');
       }
+      await this.close();
       return false;
     }
   }
