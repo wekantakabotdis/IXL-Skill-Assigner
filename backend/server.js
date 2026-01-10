@@ -295,7 +295,9 @@ app.get('/api/queue', (req, res) => {
           : firstStudent?.name || 'Unknown'),
         skillCodes: skills.map(s => {
           const isNJSLA = (s.subject || '').startsWith('njsla-');
-          if (isNJSLA) return s.name;
+          const isBulleted = s.skill_code?.includes('.new') || !(s.skill_code?.match(/\.\d+$/));
+
+          if (isNJSLA || isBulleted) return s.name;
           return s.skill_code || s.skillCode || s.name?.match(/^([A-Z]+\.\d+)/)?.[1];
         }).filter(Boolean)
       };

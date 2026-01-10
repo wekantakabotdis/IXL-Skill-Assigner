@@ -107,26 +107,53 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
 
       if (dataSkillId && !dataSkillId.startsWith('njsla-')) {
         skillNode = page.locator(`a.skill-tree-skill-link[data-skill="${dataSkillId}"]`).first();
-      } else {
+      }
+
+      if (!skillNode || !await skillNode.count()) {
+        const nameToFind = skillData.skillName;
+        console.log(`Matching NJSLA skill by name "${nameToFind}"...`);
+        skillNode = section.locator('a.skill-tree-skill-link').filter({ hasText: nameToFind }).first();
+      }
+
+      if (!skillNode || !await skillNode.count()) {
         const allSkillsInSec = await section.locator('a.skill-tree-skill-link').all();
         skillNode = allSkillsInSec[parseInt(skillNum, 10) - 1];
       }
     } else {
-      if (dataSkillId && dataSkillId.startsWith('20')) {
-        skillNode = page.locator(`li.skill-tree-skill-node:has(a[data-skill="${dataSkillId}"])`).first();
-      }
-      if (!skillNode || !await skillNode.count()) {
-        const [cat, num] = skillCode.split('.');
-        const headers = await page.locator('.skill-tree-skills-header').all();
-        let catSec = null;
-        for (const h of headers) {
-          const txt = await h.textContent();
-          if (txt?.trim().startsWith(`${cat}.`)) {
-            catSec = h.locator('xpath=ancestor::div[contains(@class, "skill-tree-category") or contains(@id, "category")]').first();
-            break;
-          }
+      const [cat, num] = skillCode.split('.');
+      const isNew = skillCode.includes('new');
+
+      // 1. Find the Category Section first
+      const headers = await page.locator('.skill-tree-skills-header').all();
+      let catSec = null;
+      for (const h of headers) {
+        const txt = await h.textContent();
+        if (txt?.trim().startsWith(`${cat}.`)) {
+          catSec = h.locator('xpath=ancestor::div[contains(@class, "skill-tree-category") or @id="category-node"] | ancestor::div[contains(@id, "category")]').first();
+          break;
         }
-        skillNode = catSec.locator('li.skill-tree-skill-node').filter({ has: page.locator(`span.skill-tree-skill-number:text-is("${num}")`) }).first();
+      }
+
+      if (catSec && await catSec.count()) {
+        if (!isNew && !isNaN(parseInt(num, 10))) {
+          // Try matching by number first for standard skills
+          skillNode = catSec.locator('li.skill-tree-skill-node').filter({
+            has: page.locator(`span.skill-tree-skill-number:text-is("${num}")`)
+          }).first();
+        }
+
+        // Fallback or for "new" skills: Try matching by skill name within the category
+        if (!skillNode || !await skillNode.count()) {
+          const nameToFind = skillData.skillName || skillData.skillNameClean;
+          console.log(`Matching skill by name "${nameToFind}" within category "${cat}"...`);
+          skillNode = catSec.locator('li.skill-tree-skill-node').filter({ hasText: nameToFind }).first();
+        }
+      }
+
+      // Final global fallback if section-based search failed
+      if (!skillNode || !await skillNode.count()) {
+        console.log(`Global fallback for "${skillData.skillName || skillCode}"...`);
+        skillNode = page.locator('li.skill-tree-skill-node').filter({ hasText: skillData.skillName }).first();
       }
     }
 

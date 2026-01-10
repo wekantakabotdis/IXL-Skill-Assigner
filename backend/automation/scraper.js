@@ -128,13 +128,21 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
 
         const skillNodes = categoryDiv.querySelectorAll('li.skill-tree-skill-node');
 
-        skillNodes.forEach((node) => {
+        // Use a continuous index per category to preserve page order
+        skillNodes.forEach((node, index) => {
           const link = node.querySelector('a.skill-tree-skill-link');
           if (!link) return;
 
           const numberSpan = node.querySelector('span.skill-tree-skill-number');
           const numberText = numberSpan?.textContent?.trim() || '';
-          const skillNum = parseInt(numberText, 10);
+
+          // Check for bullet or "New!" label
+          const isBulleted = node.querySelector('.skill-tree-skill-dot') !== null ||
+            numberText === '•' ||
+            numberText === '' ||
+            node.textContent.includes('New!');
+
+          const skillNum = isBulleted ? null : parseInt(numberText, 10);
 
           const nameSpan = node.querySelector('span.skill-tree-skill-name');
           const skillName = nameSpan?.textContent?.trim() || '';
@@ -142,17 +150,18 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
           const dataSkillId = link.getAttribute('data-skill') || '';
           const skillUrl = link.href;
 
-          if (!isNaN(skillNum) && skillName && skillUrl) {
-            const skillCode = `${category}.${skillNum}`;
+          if (skillName && skillUrl) {
+            const skillCode = (!isNaN(skillNum) && skillNum !== null) ? `${category}.${skillNum}` : `${category}.new${index}`;
             results.push({
               ixlId: dataSkillId,
               skillCode: skillCode,
-              name: `${skillCode} ${skillName}`,
+              // If bulleted, just use the name as requested. If numbered, keep code prefix.
+              name: isBulleted ? skillName : `${skillCode} ${skillName}`,
               skillName: skillName,
               category: category,
               gradeLevel: grade,
               url: skillUrl,
-              displayOrder: skillNum,
+              displayOrder: index, // Preserve exact page order within category
               subject: subj
             });
           }
