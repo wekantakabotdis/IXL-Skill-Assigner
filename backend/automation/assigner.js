@@ -176,7 +176,8 @@ async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, 
   for (let i = 0; i < skillsData.length; i++) {
     if (abortChecker && abortChecker()) break;
     const skill = skillsData[i];
-    if (progressCallback) progressCallback({ current: i, total: skillsData.length, currentSkill: skill.skillCode });
+    const displayName = isNJSLA ? (skill.skillName || skill.skillCode) : skill.skillCode;
+    if (progressCallback) progressCallback({ current: i, total: skillsData.length, currentSkill: displayName });
 
     const skillResults = await assignSkill(page, skill, studentNames, action, isNJSLA);
     allResults.push(...skillResults);

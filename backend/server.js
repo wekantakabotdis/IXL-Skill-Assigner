@@ -238,7 +238,7 @@ app.post('/api/assign', async (req, res) => {
       groupName,
       status: 'queued',
       progress: 0,
-      total: skillIds.length * studentIds.length,
+      total: skillIds.length, // Always skill-based count now
       results: []
     };
 
@@ -293,7 +293,11 @@ app.get('/api/queue', (req, res) => {
         studentName: task.groupName || (task.studentIds.length > 1
           ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
           : firstStudent?.name || 'Unknown'),
-        skillCodes: skills.map(s => s.skill_code || s.skillCode || s.name?.match(/^([A-Z]+\.\d+)/)?.[1]).filter(Boolean)
+        skillCodes: skills.map(s => {
+          const isNJSLA = (s.subject || '').startsWith('njsla-');
+          if (isNJSLA) return s.name;
+          return s.skill_code || s.skillCode || s.name?.match(/^([A-Z]+\.\d+)/)?.[1];
+        }).filter(Boolean)
       };
     });
 
@@ -382,13 +386,25 @@ async function processQueue() {
       }
 
       const skillsData = skills.map(s => {
-        const code = s.skill_code || s.skillCode;
+        let code = s.skill_code || s.skillCode;
         if (!code) {
           const match = s.name?.match(/^([A-Z]+\.\d+)/);
-          if (!match) return null;
-          return { skillCode: match[1], dataSkillId: s.ixl_id };
+          code = match ? match[1] : null;
         }
-        return { skillCode: code, dataSkillId: s.ixl_id };
+
+        // For NJSLA, if code is still null, we might be able to use the displayOrder/letter logic
+        // But the scraper usually provides it. If not, use ID as fallback for code.
+        if (!code && (s.subject || '').startsWith('njsla-')) {
+          code = s.ixl_id;
+        }
+
+        if (!code) return null;
+
+        return {
+          skillCode: code,
+          dataSkillId: s.ixl_id,
+          skillName: s.name || s.skillName || s.skill_name
+        };
       }).filter(Boolean);
 
       if (skillsData.length === 0) {
