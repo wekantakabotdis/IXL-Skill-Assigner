@@ -217,7 +217,7 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/assign', async (req, res) => {
   try {
-    const { studentIds, skillIds, action = 'suggest' } = req.body;
+    const { studentIds, skillIds, action = 'suggest', groupName = null } = req.body;
 
     if (!studentIds || studentIds.length === 0 || !skillIds || skillIds.length === 0) {
       return res.status(400).json({
@@ -235,6 +235,7 @@ app.post('/api/assign', async (req, res) => {
       studentIds,
       skillIds,
       action,
+      groupName,
       status: 'queued',
       progress: 0,
       total: skillIds.length * studentIds.length,
@@ -289,10 +290,10 @@ app.get('/api/queue', (req, res) => {
       const skills = db.getSkillsByIds(task.skillIds);
       return {
         ...task,
-        studentName: task.studentIds.length > 1
+        studentName: task.groupName || (task.studentIds.length > 1
           ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
-          : firstStudent?.name || 'Unknown',
-        skillCodes: skills.map(s => s.skill_code || s.skillCode).filter(Boolean)
+          : firstStudent?.name || 'Unknown'),
+        skillCodes: skills.map(s => s.skill_code || s.skillCode || s.name?.match(/^([A-Z]+\.\d+)/)?.[1]).filter(Boolean)
       };
     });
 
@@ -300,9 +301,9 @@ app.get('/api/queue', (req, res) => {
       const firstStudent = db.getStudent(task.studentIds[0]);
       return {
         ...task,
-        studentName: task.studentIds.length > 1
+        studentName: task.groupName || (task.studentIds.length > 1
           ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
-          : firstStudent?.name || 'Unknown'
+          : firstStudent?.name || 'Unknown')
       };
     });
 
@@ -399,7 +400,11 @@ async function processQueue() {
       const page = browser.getPage();
       const studentNames = students.map(s => s.name);
 
-      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${studentNames.join(', ')}`);
+      const displayName = task.groupName || (studentNames.length > 1
+        ? `${studentNames[0]} + ${studentNames.length - 1} more`
+        : studentNames[0]);
+
+      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${displayName} (${studentNames.join(', ')})`);
 
       const results = await assignMultipleSkills(
         page,
@@ -430,8 +435,8 @@ async function processQueue() {
             result.success ? 'completed' : 'failed',
             result.error || null
           );
-          if (gradeLevel) {
-            db.updateStudentDefaultGrade(student.id, gradeLevel);
+          if (gradeLevel && subject) {
+            db.updateStudentDefaults(student.id, gradeLevel, subject);
           }
         }
       });

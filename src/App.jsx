@@ -84,6 +84,7 @@ export default function App() {
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
   const [gradeLevel, setGradeLevel] = useState(null);
+  const [activeGroupName, setActiveGroupName] = useState(null);
   const [actionMode, setActionMode] = useState('suggest');
 
   const [isAssigning, setIsAssigning] = useState(false);
@@ -215,19 +216,13 @@ export default function App() {
 
       try {
         const commonDefaults = await api.getCommonDefaults(selectedStudentIds);
+
+        // Only apply if this is still the current selection count
+        // and we haven't switched to a different task
         if (commonDefaults && commonDefaults.subject && commonDefaults.gradeLevel) {
           setSubject(commonDefaults.subject);
           setGradeLevel(commonDefaults.gradeLevel);
           loadSkills(commonDefaults.gradeLevel, commonDefaults.subject);
-
-          if (commonDefaults.lastSkillId) {
-            setSelectedSkillIds([commonDefaults.lastSkillId]);
-          }
-        } else {
-          // If no common defaults, maybe clear or keep current? 
-          // Requirement: "make sure the defaults changed everytime a person is selected or deselected"
-          // If no common defaults, we can fallback to the individual's default if only one selected, 
-          // or just keep what it is. The API already handles fallback to first student.
         }
       } catch (error) {
         console.error('Error fetching group defaults:', error);
@@ -312,6 +307,7 @@ export default function App() {
 
   const handleGradeChange = async (newGrade) => {
     setGradeLevel(newGrade);
+    setSelectedSkillIds([]); // Reset skills when grade changes
     loadSkills(newGrade, subject);
   };
 
@@ -323,6 +319,12 @@ export default function App() {
     setSubject(newSubject);
     setSkills([]);
     setGradeLevel(null);
+    setSelectedSkillIds([]); // Reset skills when subject changes
+  };
+
+  const handleStudentSelect = (ids, groupName = null) => {
+    setSelectedStudentIds(ids);
+    setActiveGroupName(groupName);
   };
 
   const handleSyncStudents = async () => {
@@ -389,7 +391,7 @@ export default function App() {
     const studentIds = selectedStudentIds;
 
     try {
-      const result = await api.assignSkills(studentIds, skillIds, actionMode);
+      const result = await api.assignSkills(studentIds, skillIds, actionMode, activeGroupName);
 
       if (result.taskId) {
         showNotification('success', `Task queued for ${studentIds.length} students and ${skillIds.length} skills.`);
@@ -561,7 +563,7 @@ export default function App() {
               students={students}
               groups={groups}
               selectedStudentIds={selectedStudentIds}
-              onSelect={setSelectedStudentIds}
+              onSelect={handleStudentSelect}
               onSync={handleSyncStudents}
               onCreateGroup={handleCreateGroup}
               onDeleteGroup={handleDeleteGroup}

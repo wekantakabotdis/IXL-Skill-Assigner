@@ -21,21 +21,21 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
     const newSelection = selectedStudentIds.includes(id)
       ? selectedStudentIds.filter(sid => sid !== id)
       : [...selectedStudentIds, id];
-    onSelect(newSelection);
+    onSelect(newSelection, null); // Individual selection clears group name
   };
 
   const handleSelectAll = (e) => {
     e.stopPropagation();
-    onSelect(students.map(s => s.id));
+    onSelect(students.map(s => s.id), "All Students");
   };
 
   const handleClearAll = (e) => {
     e.stopPropagation();
-    onSelect([]);
+    onSelect([], null);
   };
 
-  const handleSelectGroup = (studentIds) => {
-    onSelect(studentIds);
+  const handleSelectGroup = (studentIds, name) => {
+    onSelect(studentIds, name);
     setIsOpen(false);
   };
 
@@ -138,7 +138,7 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
                       <div
                         key={`group-${group.id}`}
                         className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer flex items-center justify-between group transition-colors"
-                        onClick={() => handleSelectGroup(group.studentIds)}
+                        onClick={() => handleSelectGroup(group.studentIds, group.name)}
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-5 h-5 rounded-full bg-ixl-turquoise-light flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 174, 239, 0.1)' }}>

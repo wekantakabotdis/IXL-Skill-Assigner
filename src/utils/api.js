@@ -55,11 +55,11 @@ export const api = {
     return res.json();
   },
 
-  async assignSkills(studentIds, skillIds, action = 'suggest') {
+  async assignSkills(studentIds, skillIds, action = 'suggest', groupName = null) {
     const res = await fetch(getUrl('/assign'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentIds, skillIds, action })
+      body: JSON.stringify({ studentIds, skillIds, action, groupName })
     });
     return res.json();
   },
