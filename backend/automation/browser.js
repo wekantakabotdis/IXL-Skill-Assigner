@@ -70,9 +70,10 @@ class IXLBrowser {
         try {
           // Fast check for username field
           await this.page.waitForSelector('input[name="username"], input#username', { timeout: 15000 });
-          await humanType(this.page, 'input[name="username"], input#username', username);
+          // Use fill() for instant entry instead of slow typing
+          await this.page.fill('input[name="username"], input#username', username);
           await this.page.waitForSelector('input[name="password"], input#password', { timeout: 5000 });
-          await humanType(this.page, 'input[name="password"], input#password', password);
+          await this.page.fill('input[name="password"], input#password', password);
 
           await this.page.keyboard.press('Enter');
           console.log('Submitted login form. Waiting for authentication...');

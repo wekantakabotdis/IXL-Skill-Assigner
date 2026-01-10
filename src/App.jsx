@@ -84,11 +84,6 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [saveAccount, setSaveAccount] = useState(false);
   const [isHeadless, setIsHeadless] = useState(false);
-
-  // Save headless setting when it changes
-  useEffect(() => {
-    api.saveSetting('headless_mode', isHeadless);
-  }, [isHeadless]);
   const [showHeadlessInfo, setShowHeadlessInfo] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -668,7 +663,11 @@ export default function App() {
                       <input
                         type="checkbox"
                         checked={isHeadless}
-                        onChange={(e) => setIsHeadless(e.target.checked)}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setIsHeadless(val);
+                          api.saveSetting('headless_mode', val);
+                        }}
                         className="sr-only"
                       />
                       <div
