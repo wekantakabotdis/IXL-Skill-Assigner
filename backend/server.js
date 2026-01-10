@@ -105,6 +105,55 @@ app.post('/api/students/:id/defaults', async (req, res) => {
   }
 });
 
+// Get common defaults for a group of students
+app.get('/api/students/common-defaults', async (req, res) => {
+  try {
+    const { ids } = req.query;
+    if (!ids) return res.status(400).json({ error: 'ids query param is required' });
+
+    const studentIds = ids.split(',').map(id => parseInt(id));
+    const defaults = db.getLastCommonSkill(studentIds);
+
+    res.json(defaults || { subject: null, gradeLevel: null, lastSkillId: null });
+  } catch (error) {
+    console.error('Error fetching common defaults:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Groups endpoints
+app.get('/api/groups', (req, res) => {
+  try {
+    const groups = db.getGroups();
+    res.json(groups);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/groups', (req, res) => {
+  try {
+    const { name, studentIds } = req.body;
+    if (!name || !studentIds) {
+      return res.status(400).json({ error: 'Name and studentIds are required' });
+    }
+    const groupId = db.createGroup(name, studentIds);
+    res.json({ success: true, id: groupId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/groups/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.deleteGroup(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/sync/skills', async (req, res) => {
   try {
     const { gradeLevel = '8', subject = 'math' } = req.body;
@@ -168,11 +217,11 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/assign', async (req, res) => {
   try {
-    const { studentId, skillIds, action = 'suggest' } = req.body;
+    const { studentIds, skillIds, action = 'suggest' } = req.body;
 
-    if (!studentId || !skillIds || skillIds.length === 0) {
+    if (!studentIds || studentIds.length === 0 || !skillIds || skillIds.length === 0) {
       return res.status(400).json({
-        error: 'studentId and skillIds are required'
+        error: 'studentIds and skillIds are required'
       });
     }
 
@@ -183,12 +232,12 @@ app.post('/api/assign', async (req, res) => {
     const taskId = uuidv4();
     const task = {
       id: taskId,
-      studentId,
+      studentIds,
       skillIds,
       action,
       status: 'queued',
       progress: 0,
-      total: skillIds.length,
+      total: skillIds.length * studentIds.length,
       results: []
     };
 
@@ -236,20 +285,24 @@ app.get('/api/history', (req, res) => {
 app.get('/api/queue', (req, res) => {
   try {
     const queueWithDetails = assignmentQueue.map(task => {
-      const student = db.getStudent(task.studentId);
+      const firstStudent = db.getStudent(task.studentIds[0]);
       const skills = db.getSkillsByIds(task.skillIds);
       return {
         ...task,
-        studentName: student?.name || 'Unknown',
+        studentName: task.studentIds.length > 1
+          ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
+          : firstStudent?.name || 'Unknown',
         skillCodes: skills.map(s => s.skill_code || s.skillCode).filter(Boolean)
       };
     });
 
     const allTasks = Array.from(taskStatuses.values()).map(task => {
-      const student = db.getStudent(task.studentId);
+      const firstStudent = db.getStudent(task.studentIds[0]);
       return {
         ...task,
-        studentName: student?.name || 'Unknown'
+        studentName: task.studentIds.length > 1
+          ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
+          : firstStudent?.name || 'Unknown'
       };
     });
 
@@ -317,9 +370,9 @@ async function processQueue() {
     }
 
     try {
-      const student = db.getStudent(task.studentId);
-      if (!student) {
-        throw new Error('Student not found');
+      const students = task.studentIds.map(id => db.getStudent(id)).filter(Boolean);
+      if (students.length === 0) {
+        throw new Error('No valid students found');
       }
 
       const skills = db.getSkillsByIds(task.skillIds);
@@ -327,42 +380,31 @@ async function processQueue() {
         throw new Error('No valid skills found');
       }
 
-      console.log('Sample skill from DB:', JSON.stringify(skills[0], null, 2));
-
       const skillsData = skills.map(s => {
         const code = s.skill_code || s.skillCode;
         if (!code) {
           const match = s.name?.match(/^([A-Z]+\.\d+)/);
-          if (!match) {
-            console.error('Could not extract skill code from skill:', s);
-            return null;
-          }
-          return {
-            skillCode: match[1],
-            dataSkillId: s.ixl_id
-          };
+          if (!match) return null;
+          return { skillCode: match[1], dataSkillId: s.ixl_id };
         }
-        return {
-          skillCode: code,
-          dataSkillId: s.ixl_id
-        };
+        return { skillCode: code, dataSkillId: s.ixl_id };
       }).filter(Boolean);
 
       if (skillsData.length === 0) {
-        throw new Error('No skill codes could be extracted from skills');
+        throw new Error('No skill codes could be extracted');
       }
 
       const gradeLevel = skills[0].grade_level || skills[0].gradeLevel;
       const subject = skills[0].subject || 'math';
       const page = browser.getPage();
+      const studentNames = students.map(s => s.name);
 
-      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} ${subject} skills to ${student.name} (Grade ${gradeLevel})`);
-      console.log(`Skills: ${skillsData.map(s => s.skillCode).join(', ')}`);
+      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${studentNames.join(', ')}`);
 
       const results = await assignMultipleSkills(
         page,
         skillsData,
-        student.name,
+        studentNames,
         gradeLevel,
         task.action,
         (progress) => {
@@ -374,33 +416,25 @@ async function processQueue() {
           });
         },
         subject,
-        () => abortRequested // Pass abort checker function
+        () => abortRequested
       );
 
-      // Check if aborted during assignment
-      if (abortRequested) {
-        taskStatuses.set(task.id, {
-          ...task,
-          status: 'aborted',
-          error: 'Aborted by user',
-          results
-        });
-        break;
-      }
-
-      results.forEach((result, index) => {
-        const skill = skills[index];
-        db.recordAssignment(
-          task.studentId,
-          skill.id,
-          result.success ? 'completed' : 'failed',
-          result.error || null
-        );
+      // Record history
+      results.forEach((result) => {
+        const student = students.find(s => s.name === result.studentName);
+        const skill = skills.find(sk => (sk.skill_code || sk.skillCode) === result.skillCode);
+        if (student && skill) {
+          db.recordAssignment(
+            student.id,
+            skill.id,
+            result.success ? 'completed' : 'failed',
+            result.error || null
+          );
+          if (gradeLevel) {
+            db.updateStudentDefaultGrade(student.id, gradeLevel);
+          }
+        }
       });
-
-      if (gradeLevel) {
-        db.updateStudentDefaultGrade(task.studentId, gradeLevel);
-      }
 
       taskStatuses.set(task.id, {
         ...task,

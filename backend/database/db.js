@@ -70,6 +70,22 @@ class DB {
       this.db.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
     } catch (e) {
     }
+
+    // Ensure groups and group_members exist (in case schema.sql wasn't run)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS group_members (
+        group_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        PRIMARY KEY (group_id, student_id),
+        FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+      );
+    `);
   }
 
   getStudents() {
@@ -108,6 +124,87 @@ class DB {
       'UPDATE students SET default_grade = ?, default_subject = ? WHERE id = ?'
     );
     return stmt.run(gradeLevel, subject, studentId);
+  }
+
+  getLastCommonSkill(studentIds) {
+    if (!studentIds || studentIds.length === 0) return null;
+
+    const placeholders = studentIds.map(() => '?').join(',');
+
+    // Find the last skill assigned to any of these students
+    // The requirement says: "the default should be whatever the last skill was assigned to all of these selected students at once"
+    // This implies we look for a skill that was assigned in the same batch (or close timestamp) to all of them.
+    // However, if no such "all at once" assignment exists, we could fall back to most recent.
+    // Let's try to find a skill that has recent entries for all selected student IDs.
+
+    // Step 1: Find the most recent skill assigned to ONE of the students
+    // Step 2: Check if that same skill was assigned to ALL of them around the same time
+
+    const recentSkill = this.db.prepare(`
+      SELECT skill_id, assigned_at 
+      FROM assignment_history 
+      WHERE student_id IN (${placeholders}) 
+      ORDER BY assigned_at DESC 
+      LIMIT 1
+    `).get(...studentIds);
+
+    if (!recentSkill) return null;
+
+    // Check if others have this skill assigned within 5 minutes of each other
+    const matchingCount = this.db.prepare(`
+      SELECT COUNT(DISTINCT student_id) as count
+      FROM assignment_history
+      WHERE skill_id = ? 
+      AND student_id IN (${placeholders})
+      AND ABS(STRFTIME('%s', assigned_at) - STRFTIME('%s', ?)) < 300
+    `).get(recentSkill.skill_id, ...studentIds, recentSkill.assigned_at);
+
+    if (matchingCount.count === studentIds.length) {
+      const skill = this.db.prepare('SELECT * FROM skills WHERE id = ?').get(recentSkill.skill_id);
+      const student = this.db.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
+
+      return {
+        subject: skill?.subject || student?.default_subject,
+        gradeLevel: skill?.grade_level || student?.default_grade,
+        lastSkillId: recentSkill.skill_id
+      };
+    }
+
+    // Fallback: Just return the first student's defaults if no common recent skill
+    const firstStudent = this.db.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
+    return {
+      subject: firstStudent?.default_subject,
+      gradeLevel: firstStudent?.default_grade,
+      lastSkillId: null
+    };
+  }
+
+  // Group methods
+  getGroups() {
+    const groups = this.db.prepare('SELECT * FROM groups ORDER BY name').all();
+    return groups.map(group => {
+      const studentIds = this.db.prepare('SELECT student_id FROM group_members WHERE group_id = ?')
+        .all(group.id)
+        .map(m => m.student_id);
+      return { ...group, studentIds };
+    });
+  }
+
+  createGroup(name, studentIds) {
+    const transaction = this.db.transaction((name, studentIds) => {
+      const info = this.db.prepare('INSERT INTO groups (name) VALUES (?)').run(name);
+      const groupId = info.lastInsertRowid;
+      const stmt = this.db.prepare('INSERT INTO group_members (group_id, student_id) VALUES (?, ?)');
+      for (const studentId of studentIds) {
+        stmt.run(groupId, studentId);
+      }
+      return groupId;
+    });
+    return transaction(name, studentIds);
+  }
+
+  deleteGroup(id) {
+    return this.db.prepare('DELETE FROM groups WHERE id = ?').run(id);
   }
 
   updateStudentDefaultGrade(studentId, gradeLevel) {

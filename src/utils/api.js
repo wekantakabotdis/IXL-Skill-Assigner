@@ -55,12 +55,17 @@ export const api = {
     return res.json();
   },
 
-  async assignSkills(studentId, skillIds, action = 'suggest') {
+  async assignSkills(studentIds, skillIds, action = 'suggest') {
     const res = await fetch(getUrl('/assign'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId, skillIds, action })
+      body: JSON.stringify({ studentIds, skillIds, action })
     });
+    return res.json();
+  },
+
+  async getCommonDefaults(studentIds) {
+    const res = await fetch(getUrl(`/students/common-defaults?ids=${studentIds.join(',')}`));
     return res.json();
   },
 
@@ -94,6 +99,27 @@ export const api = {
   async abortTasks() {
     const res = await fetch(getUrl('/abort'), {
       method: 'POST'
+    });
+    return res.json();
+  },
+
+  async getGroups() {
+    const res = await fetch(getUrl('/groups'));
+    return res.json();
+  },
+
+  async createGroup(name, studentIds) {
+    const res = await fetch(getUrl('/groups'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, studentIds })
+    });
+    return res.json();
+  },
+
+  async deleteGroup(id) {
+    const res = await fetch(getUrl(`/groups/${id}`), {
+      method: 'DELETE'
     });
     return res.json();
   }

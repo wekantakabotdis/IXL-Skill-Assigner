@@ -78,8 +78,9 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [students, setStudents] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
   const [gradeLevel, setGradeLevel] = useState(null);
@@ -204,29 +205,37 @@ export default function App() {
   };
 
   useEffect(() => {
-    const applyStudentDefaults = async () => {
-      if (selectedStudent && students.length > 0) {
-        const student = students.find(s => s.id === selectedStudent);
-        if (student) {
-          const savedSubject = student.default_subject;
-          const savedGrade = student.default_grade;
+    const applyGroupDefaults = async () => {
+      if (selectedStudentIds.length === 0) {
+        setSubject(null);
+        setGradeLevel(null);
+        setSkills([]);
+        return;
+      }
 
-          if (savedSubject && savedGrade) {
-            const availableGrades = getAvailableGrades(savedSubject);
-            const gradeIsValid = availableGrades.some(g => g.value === savedGrade);
+      try {
+        const commonDefaults = await api.getCommonDefaults(selectedStudentIds);
+        if (commonDefaults && commonDefaults.subject && commonDefaults.gradeLevel) {
+          setSubject(commonDefaults.subject);
+          setGradeLevel(commonDefaults.gradeLevel);
+          loadSkills(commonDefaults.gradeLevel, commonDefaults.subject);
 
-            if (gradeIsValid) {
-              setSubject(savedSubject);
-              setGradeLevel(savedGrade);
-              loadSkills(savedGrade, savedSubject);
-            }
+          if (commonDefaults.lastSkillId) {
+            setSelectedSkillIds([commonDefaults.lastSkillId]);
           }
+        } else {
+          // If no common defaults, maybe clear or keep current? 
+          // Requirement: "make sure the defaults changed everytime a person is selected or deselected"
+          // If no common defaults, we can fallback to the individual's default if only one selected, 
+          // or just keep what it is. The API already handles fallback to first student.
         }
+      } catch (error) {
+        console.error('Error fetching group defaults:', error);
       }
     };
 
-    applyStudentDefaults();
-  }, [selectedStudent, students]);
+    applyGroupDefaults();
+  }, [selectedStudentIds]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -274,6 +283,10 @@ export default function App() {
         console.log('Setting students:', studentsData.length);
         setStudents(studentsData);
       }
+
+      // Load groups
+      const groupsData = await api.getGroups();
+      setGroups(groupsData || []);
 
       // Don't try to load skills on initial login - user needs to select subject and grade first
       // Skills will be loaded when user selects a subject/grade
@@ -330,9 +343,35 @@ export default function App() {
     }
   };
 
+  const handleCreateGroup = async (name, studentIds) => {
+    try {
+      const result = await api.createGroup(name, studentIds);
+      if (result.success) {
+        showNotification('success', `Group "${name}" created!`);
+        const groupsData = await api.getGroups();
+        setGroups(groupsData);
+      }
+    } catch (error) {
+      showNotification('error', 'Error creating group: ' + error.message);
+    }
+  };
+
+  const handleDeleteGroup = async (id) => {
+    try {
+      const result = await api.deleteGroup(id);
+      if (result.success) {
+        showNotification('success', 'Group deleted');
+        const groupsData = await api.getGroups();
+        setGroups(groupsData);
+      }
+    } catch (error) {
+      showNotification('error', 'Error deleting group: ' + error.message);
+    }
+  };
+
   const handleAssign = async () => {
-    if (!selectedStudent) {
-      showNotification('error', 'Please select a student');
+    if (selectedStudentIds.length === 0) {
+      showNotification('error', 'Please select at least one student');
       return;
     }
 
@@ -347,16 +386,19 @@ export default function App() {
     }
 
     const skillIds = selectedSkillIds;
+    const studentIds = selectedStudentIds;
 
     try {
-      const result = await api.assignSkills(selectedStudent, skillIds, actionMode);
+      const result = await api.assignSkills(studentIds, skillIds, actionMode);
 
       if (result.taskId) {
-        showNotification('success', `Task queued! ${skillIds.length} skills for assignment.`);
+        showNotification('success', `Task queued for ${studentIds.length} students and ${skillIds.length} skills.`);
 
-        // Save student defaults for next time
+        // Update defaults for all selected students
         try {
-          await api.updateStudentDefaults(selectedStudent, gradeLevel, subject);
+          await Promise.all(studentIds.map(id =>
+            api.updateStudentDefaults(id, gradeLevel, subject)
+          ));
           // Refresh students to get updated defaults
           const updatedStudents = await api.getStudents();
           setStudents(updatedStudents);
@@ -365,7 +407,7 @@ export default function App() {
         }
 
         setSelectedSkillIds([]);
-        setSelectedStudent(null);
+        setSelectedStudentIds([]);
         setSubject(null);
         setGradeLevel(null);
         setSkills([]);
@@ -517,9 +559,12 @@ export default function App() {
 
             <StudentSelector
               students={students}
-              selectedStudent={selectedStudent}
-              onSelect={setSelectedStudent}
+              groups={groups}
+              selectedStudentIds={selectedStudentIds}
+              onSelect={setSelectedStudentIds}
               onSync={handleSyncStudents}
+              onCreateGroup={handleCreateGroup}
+              onDeleteGroup={handleDeleteGroup}
             />
 
             <div className="mb-6 flex flex-col">
@@ -602,7 +647,7 @@ export default function App() {
 
             <button
               onClick={handleAssign}
-              disabled={!selectedStudent || selectedSkillIds.length === 0}
+              disabled={selectedStudentIds.length === 0 || selectedSkillIds.length === 0}
               className="btn-ink w-full py-5 rounded-xl font-semibold text-lg tracking-wide"
             >
               Add to Queue

@@ -43,3 +43,19 @@ CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category);
 CREATE INDEX IF NOT EXISTS idx_skills_grade ON skills(grade_level);
 CREATE INDEX IF NOT EXISTS idx_assignment_student ON assignment_history(student_id);
 CREATE INDEX IF NOT EXISTS idx_assignment_date ON assignment_history(assigned_at);
+
+-- Groups table
+CREATE TABLE IF NOT EXISTS groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Group members table
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id INTEGER NOT NULL,
+  student_id INTEGER NOT NULL,
+  PRIMARY KEY (group_id, student_id),
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
