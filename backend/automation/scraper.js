@@ -9,7 +9,7 @@ async function scrapeStudents(page) {
     await page.waitForTimeout(humanDelay());
 
     console.log('Waiting for page to fully load...');
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(1000); // Reduced from 3000
 
     console.log('Extracting student data from page...');
     const students = await page.evaluate(() => {
@@ -69,7 +69,7 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
     await page.waitForSelector('.skill-tree-skill-node', { timeout: 15000 }).catch(() => {
       console.log('skill-tree-skill-node not found, waiting longer...');
     });
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(1000); // Reduced from 3000
 
     console.log('Extracting skill data from page...');
     const skills = await page.evaluate(({ grade, subj }) => {
@@ -207,7 +207,7 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
     await page.waitForSelector('.skill-plan-section', { timeout: 15000 }).catch(() => {
       console.log('skill-plan-section not found, waiting longer...');
     });
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(1000); // Reduced from 3000
 
     console.log('Extracting skill data from NJSLA skill plan page...');
     const skills = await page.evaluate(({ grade, subj }) => {

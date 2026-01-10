@@ -33,7 +33,7 @@ async function selectStudentsInDropdown(page, studentNames, action = 'suggest') 
           if (shouldClick) {
             console.log(`Clicking star for "${name}" to ${action}...`);
             await starInRow.click();
-            await page.waitForTimeout(500); // Small delay between clicks
+            await page.waitForTimeout(200); // Reduced from 500
           } else {
             console.log(`Star for "${name}" already in desired state (${action})`);
           }
@@ -48,8 +48,8 @@ async function selectStudentsInDropdown(page, studentNames, action = 'suggest') 
     }
 
     if (foundStudents.size < studentNames.length && await dropdownContent.count()) {
-      await dropdownContent.evaluate(el => el.scrollTop += 60);
-      await page.waitForTimeout(100);
+      await dropdownContent.evaluate(el => el.scrollTop += 120); // Increased from 60
+      await page.waitForTimeout(50); // Reduced from 100
     }
   }
 
@@ -145,7 +145,7 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
 
     const dropdownResults = await selectStudentsInDropdown(page, studentNames, action);
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(100); // Reduced from 500
 
     return dropdownResults.map(r => ({ ...r, skillCode, success: r.success, error: r.error }));
   } catch (err) {
@@ -171,7 +171,7 @@ async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, 
 
   console.log(`Navigating to ${pageUrl}`);
   await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1500); // Reduced from 3000
 
   for (let i = 0; i < skillsData.length; i++) {
     if (abortChecker && abortChecker()) break;
@@ -182,7 +182,7 @@ async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, 
     const skillResults = await assignSkill(page, skill, studentNames, action, isNJSLA);
     allResults.push(...skillResults);
 
-    if (i < skillsData.length - 1) await page.waitForTimeout(humanDelay());
+    if (i < skillsData.length - 1) await page.waitForTimeout(100); // Fixed 100ms instead of humanDelay
   }
 
   if (progressCallback) progressCallback({ current: skillsData.length, total: skillsData.length, completed: true });

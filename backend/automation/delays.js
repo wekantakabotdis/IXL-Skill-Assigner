@@ -1,11 +1,11 @@
 
 
 const humanDelay = () => {
-  return 1000 + Math.random() * 2000;
+  return 500 + Math.random() * 500;
 };
 
 const shortDelay = () => {
-  return 100 + Math.random() * 200;
+  return 50 + Math.random() * 100;
 };
 
 const humanClick = async (page, selector) => {
@@ -19,7 +19,7 @@ const humanType = async (page, selector, text) => {
   await page.waitForTimeout(shortDelay());
   for (const char of text) {
     await page.keyboard.type(char);
-    await page.waitForTimeout(50 + Math.random() * 100);
+    await page.waitForTimeout(20 + Math.random() * 50);
   }
 };
 
