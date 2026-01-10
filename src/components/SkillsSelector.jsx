@@ -30,9 +30,9 @@ export default function SkillsSelector({ skills, selectedSkillIds, onSelectionCh
     const skillName = skill.skillName || skill.name?.replace(/^[A-Z]+\.\d+\s*/, '') || '';
     const subj = skill.subject || '';
 
-    // For NJSLA, don't include the A.1 - prefix
-    if (subj.startsWith('njsla-')) {
-      return skillName || skill.name || 'Unknown Skill';
+    // For NJSLA or "new" (bulleted) skills, return the full name which may include "New!"
+    if (subj.startsWith('njsla-') || code.includes('.new')) {
+      return skill.name || skillName || 'Unknown Skill';
     }
 
     if (code && skillName) {

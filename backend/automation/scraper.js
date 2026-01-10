@@ -147,6 +147,11 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
           const nameSpan = node.querySelector('span.skill-tree-skill-name');
           const skillName = nameSpan?.textContent?.trim() || '';
 
+          // Capture "New!" prefix if it exists
+          const prefixSpan = node.querySelector('.new-skill-name-prefix');
+          const prefixText = prefixSpan?.textContent?.trim() || '';
+          const fullDisplayName = prefixText ? `${prefixText} ${skillName}` : skillName;
+
           const dataSkillId = link.getAttribute('data-skill') || '';
           const skillUrl = link.href;
 
@@ -155,8 +160,8 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
             results.push({
               ixlId: dataSkillId,
               skillCode: skillCode,
-              // If bulleted, just use the name as requested. If numbered, keep code prefix.
-              name: isBulleted ? skillName : `${skillCode} ${skillName}`,
+              // For bulleted skills, include the prefix (e.g. "New!") in the name
+              name: isBulleted ? fullDisplayName : `${skillCode} ${skillName}`,
               skillName: skillName,
               category: category,
               gradeLevel: grade,
