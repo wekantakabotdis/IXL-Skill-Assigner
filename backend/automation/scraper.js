@@ -86,7 +86,27 @@ async function scrapeStudents(page) {
         // Extract class name if applicable
         let className = null;
         if (hasClasses && classColIndex >= 0 && cells[classColIndex]) {
-          className = cells[classColIndex].textContent?.trim() || null;
+          // The class cell may have a link inside, extract from that
+          const classLink = cells[classColIndex].querySelector('a');
+          if (classLink) {
+            className = classLink.textContent?.trim() || null;
+          } else {
+            // Otherwise get inner text but handle potential duplicates
+            const rawText = cells[classColIndex].textContent?.trim() || '';
+            // If the text appears to be duplicated (like "F-W-TuesF-W-Tues"), take first half
+            if (rawText.length % 2 === 0) {
+              const halfLen = rawText.length / 2;
+              const firstHalf = rawText.substring(0, halfLen);
+              const secondHalf = rawText.substring(halfLen);
+              if (firstHalf === secondHalf) {
+                className = firstHalf;
+              } else {
+                className = rawText;
+              }
+            } else {
+              className = rawText;
+            }
+          }
           if (className) {
             classesSet.add(className);
           }

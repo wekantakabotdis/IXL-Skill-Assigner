@@ -6,10 +6,14 @@ const { humanDelay } = require('./delays');
 async function selectClassInDropdown(page, className, action = 'suggest') {
   console.log(`Searching for class "${className}" in dropdown...`);
 
-  const dropdownContent = page.locator('.suggested-skills-modal ul.entries, .suggested-skills-modal div.entries').first();
+  // Escape special regex characters in the class name
+  const escapedClassName = className.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 
-  // Look for the class entry directly (classes appear at the top)
-  const classRow = page.locator('li.entry-row, div.entry-row').filter({ hasText: new RegExp(`^${className.replace(/[-]/g, '\\-')}$`, 'i') }).first();
+  // Look for the class entry directly (classes appear at the top of the dropdown)
+  // Use a more flexible match that looks for the class name anywhere in the row
+  const classRow = page.locator('li.entry-row, div.entry-row').filter({
+    hasText: new RegExp(escapedClassName, 'i')
+  }).first();
 
   if (await classRow.isVisible()) {
     console.log(`Found class "${className}", clicking star...`);
