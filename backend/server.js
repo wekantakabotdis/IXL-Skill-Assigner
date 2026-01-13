@@ -610,18 +610,48 @@ async function processQueue() {
       );
 
       // Record history
+      // Record history
       results.forEach((result) => {
-        const student = students.find(s => s.name === result.studentName);
         const skill = skills.find(sk => (sk.skill_code || sk.skillCode) === result.skillCode);
-        if (student && skill) {
-          db.recordAssignment(
-            student.id,
-            skill.id,
-            result.success ? 'completed' : 'failed',
-            result.error || null
-          );
-          if (gradeLevel && subject) {
-            db.updateStudentDefaults(student.id, gradeLevel, subject);
+
+        if (skill) {
+          if (result.isClass) {
+            // This was a class assignment - record for all students in the class
+            const groupName = result.studentName;
+            // Find the group to get its members
+            const allGroups = db.getGroups();
+            const group = allGroups.find(g => g.name === groupName && g.isIxlClass);
+
+            if (group && group.studentIds && group.studentIds.length > 0) {
+              console.log(`Recording class assignment for group "${groupName}" (${group.studentIds.length} students)`);
+              group.studentIds.forEach(studentId => {
+                db.recordAssignment(
+                  studentId,
+                  skill.id,
+                  result.success ? 'completed' : 'failed',
+                  result.error || null
+                );
+                if (gradeLevel && subject) {
+                  db.updateStudentDefaults(studentId, gradeLevel, subject);
+                }
+              });
+            } else {
+              console.warn(`Could not find group "${groupName}" or it has no students for history recording`);
+            }
+          } else {
+            // Individual student assignment
+            const student = students.find(s => s.name === result.studentName);
+            if (student) {
+              db.recordAssignment(
+                student.id,
+                skill.id,
+                result.success ? 'completed' : 'failed',
+                result.error || null
+              );
+              if (gradeLevel && subject) {
+                db.updateStudentDefaults(student.id, gradeLevel, subject);
+              }
+            }
           }
         }
       });

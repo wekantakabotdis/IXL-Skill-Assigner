@@ -155,7 +155,7 @@ export default function App() {
         currentGroup = {
           id: `batch-${item.id}`,
           timestamp: itemTime,
-          date: new Date(item.assigned_at),
+          date: new Date(item.assigned_at.endsWith('Z') ? item.assigned_at : item.assigned_at + 'Z'),
           student_name: item.student_name,
           student_id: item.student_id,
           items: [item]
@@ -339,6 +339,9 @@ export default function App() {
       if (result.success) {
         setIsAuthenticated(false);
         setIsLoggingIn(false);
+        if (activeGroupName) {
+          setActiveGroupName(null);
+        }
         setSelectedStudentIds([]);
         setSelectedSkillIds([]);
         setSubject(null);
@@ -522,6 +525,9 @@ export default function App() {
           console.error('Error saving student defaults:', error);
         }
 
+        if (activeGroupName) {
+          setActiveGroupName(null);
+        }
         setSelectedSkillIds([]);
         setSelectedStudentIds([]);
         setSubject(null);
