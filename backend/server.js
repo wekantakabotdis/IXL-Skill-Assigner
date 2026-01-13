@@ -504,7 +504,8 @@ async function processQueue() {
         return {
           skillCode: code,
           dataSkillId: s.ixl_id,
-          skillName: s.name || s.skillName || s.skill_name
+          skillName: s.name || s.skillName || s.skill_name,
+          skillNameClean: s.skillName || s.skill_name || s.name
         };
       }).filter(Boolean);
 

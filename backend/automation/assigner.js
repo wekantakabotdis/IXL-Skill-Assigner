@@ -128,8 +128,14 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
       let catSec = null;
       for (const h of headers) {
         const txt = await h.textContent();
-        if (txt?.trim().startsWith(`${cat}.`)) {
-          catSec = h.locator('xpath=ancestor::div[contains(@class, "skill-tree-category") or @id="category-node"] | ancestor::div[contains(@id, "category")]').first();
+        // Match "A." or "A. Numbers..."
+        if (txt?.trim() === `${cat}.` || txt?.trim().startsWith(`${cat}. `) || txt?.trim().startsWith(`${cat}.\t`)) {
+          // The skills are in an <ol> that is a sibling of the header's parent div
+          catSec = h.locator('xpath=ancestor::div[contains(@class, "skill-tree-skills-header")]/following-sibling::ol').first();
+          if (!await catSec.count()) {
+            // Fallback for old structure if direct sibling doesn't work
+            catSec = h.locator('xpath=ancestor::div[contains(@class, "skill-tree-category") or @id="category-node"] | ancestor::div[contains(@id, "category")]').first();
+          }
           break;
         }
       }
@@ -138,7 +144,7 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
         if (!isNew && !isNaN(parseInt(num, 10))) {
           // Try matching by number first for standard skills
           skillNode = catSec.locator('li.skill-tree-skill-node').filter({
-            has: page.locator(`span.skill-tree-skill-number:text-is("${num}")`)
+            has: page.locator(`span.skill-tree-skill-number`).filter({ hasText: new RegExp(`^\\s*${num}\\s*$`) })
           }).first();
         }
 
@@ -146,7 +152,10 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
         if (!skillNode || !await skillNode.count()) {
           const nameToFind = skillData.skillName || skillData.skillNameClean;
           console.log(`Matching skill by name "${nameToFind}" within category "${cat}"...`);
-          skillNode = catSec.locator('li.skill-tree-skill-node').filter({ hasText: nameToFind }).first();
+          // Try exact match or match ignoring the "A.1 " prefix if it's there
+          skillNode = catSec.locator('li.skill-tree-skill-node').filter({
+            hasText: new RegExp(`(^|\\s)${nameToFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'i')
+          }).first();
         }
       }
 

@@ -157,12 +157,20 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
 
           if (skillName && skillUrl) {
             const skillCode = (!isNaN(skillNum) && skillNum !== null) ? `${category}.${skillNum}` : `${category}.new${index}`;
+
+            // Clean the name: if it starts with the code, remove it for stored "skillName"
+            let skillNameClean = skillName;
+            const codePrefixRegex = new RegExp(`^${category}\\.${skillNum}\\s*`);
+            if (!isBulleted && !isNaN(skillNum) && skillNum !== null) {
+              skillNameClean = skillName.replace(codePrefixRegex, '').trim();
+            }
+
             results.push({
               ixlId: dataSkillId,
               skillCode: skillCode,
               // For bulleted skills, include the prefix (e.g. "New!") in the name
-              name: isBulleted ? fullDisplayName : `${skillCode} ${skillName}`,
-              skillName: skillName,
+              name: isBulleted ? fullDisplayName : `${skillCode} ${skillNameClean}`,
+              skillName: skillNameClean,
               category: category,
               gradeLevel: grade,
               url: skillUrl,
