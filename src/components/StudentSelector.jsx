@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-export default function StudentSelector({ students, groups, selectedStudentIds, onSelect, onSync, onCreateGroup, onDeleteGroup }) {
+export default function StudentSelector({ students, groups, selectedStudentIds, activeGroupName, onSelect, onSync, onCreateGroup, onDeleteGroup }) {
   const [isOpen, setIsOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -50,11 +50,11 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
     setIsCreatingGroup(false);
   };
 
-  const filteredStudents = students.filter(s =>
+  const filteredStudents = (students || []).filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredGroups = groups.filter(g =>
+  const filteredGroups = (groups || []).filter(g =>
     g.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -82,29 +82,53 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
               borderColor: isOpen ? 'var(--ixl-turquoise)' : 'var(--ixl-gray)'
             }}
           >
-            {selectedStudentIds.map(id => {
-              const student = students.find(s => s.id === id);
-              if (!student) return null;
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-turquoise-50 text-turquoise-700 rounded-full border border-turquoise-100 text-xs font-semibold animate-scaleIn"
+            {/* Show group chip if a group is selected, otherwise show individual student chips */}
+            {activeGroupName ? (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 text-green-700 rounded-full border border-green-200 text-xs font-semibold animate-scaleIn"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                </svg>
+                <span>{activeGroupName}</span>
+                <span className="text-green-500">({selectedStudentIds.length})</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect([], null);
+                  }}
+                  className="hover:text-green-900 focus:outline-none"
                 >
-                  <span>{student.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleStudent(id);
-                    }}
-                    className="hover:text-turquoise-900 focus:outline-none"
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              selectedStudentIds.map(id => {
+                const student = students.find(s => s.id === id);
+                if (!student) return null;
+                return (
+                  <div
+                    key={id}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-turquoise-50 text-turquoise-700 rounded-full border border-turquoise-100 text-xs font-semibold animate-scaleIn"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
+                    <span>{student.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStudent(id);
+                      }}
+                      className="hover:text-turquoise-900 focus:outline-none"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })
+            )}
             <input
               ref={inputRef}
               type="text"
@@ -177,7 +201,7 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
                 {filteredGroups.length > 0 && (
                   <>
                     <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50">
-                      Groups
+                      {filteredGroups.some(g => g.isIxlClass) ? 'Classes & Groups' : 'Groups'}
                     </div>
                     {filteredGroups.map((group) => (
                       <div
@@ -186,28 +210,42 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
                         onClick={() => handleSelectGroup(group.studentIds, group.name)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full bg-ixl-turquoise-light flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 174, 239, 0.1)' }}>
-                            <svg className="w-3 h-3 text-ixl-turquoise-dark" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                            </svg>
+                          <div
+                            className="w-5 h-5 rounded-full flex items-center justify-center"
+                            style={{ backgroundColor: group.isIxlClass ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 174, 239, 0.1)' }}
+                          >
+                            {group.isIxlClass ? (
+                              <svg className="w-3 h-3" style={{ color: '#D97706' }} fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10.496 2.132a1 1 0 00-.992 0l-7 4A1 1 0 003 8v7a1 1 0 100 2h14a1 1 0 100-2V8a1 1 0 00.496-1.868l-7-4zM6 9a1 1 0 00-1 1v3a1 1 0 102 0v-3a1 1 0 00-1-1zm3 1a1 1 0 012 0v3a1 1 0 11-2 0v-3zm5-1a1 1 0 00-1 1v3a1 1 0 102 0v-3a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3 text-ixl-turquoise-dark" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                              </svg>
+                            )}
                           </div>
-                          <span className="text-sm font-bold" style={{ color: 'var(--ixl-turquoise-dark)' }}>
+                          <span className="text-sm font-bold" style={{ color: group.isIxlClass ? '#D97706' : 'var(--ixl-turquoise-dark)' }}>
                             {group.name}
                           </span>
+                          {group.isIxlClass && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">IXL</span>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteGroup(group.id);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all text-gray-400"
-                          title="Delete group"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        {!group.isIxlClass && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteGroup(group.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all text-gray-400"
+                            title="Delete group"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     ))}
                   </>

@@ -2,49 +2,129 @@ const { humanDelay, humanClick } = require('./delays');
 
 async function scrapeStudents(page) {
   try {
-    console.log('Navigating to students page...');
-    await page.goto('https://www.ixl.com/analytics/students-quickview', {
+    console.log('Navigating to roster page...');
+    await page.goto('https://www.ixl.com/roster/view', {
       waitUntil: 'domcontentloaded'
     });
     await page.waitForTimeout(humanDelay());
 
-    console.log('Waiting for page to fully load...');
-    await page.waitForTimeout(1000); // Reduced from 3000
+    console.log('Waiting for roster table to load...');
+    await page.waitForSelector('table.ixl-datatable', { timeout: 15000 }).catch(() => {
+      console.log('Table not found, waiting longer...');
+    });
+    await page.waitForTimeout(1000);
 
-    console.log('Extracting student data from page...');
-    const students = await page.evaluate(() => {
-      const results = [];
-      const seenNames = new Set();
+    console.log('Extracting student data from roster table...');
+    const result = await page.evaluate(() => {
+      const students = [];
+      const classesSet = new Set();
+      const seenStudents = new Set();
 
-      const studentLinks = document.querySelectorAll('a[href*="/analytics/student-usage"]');
-      console.log('Found student links:', studentLinks.length);
+      // Check if Class column exists by looking at headers
+      const headers = document.querySelectorAll('thead th');
+      let hasClasses = false;
+      let classColIndex = -1;
+      let lastNameColIndex = -1;
+      let firstNameColIndex = -1;
+      let studentIdColIndex = -1;
 
-      studentLinks.forEach((link) => {
-        const name = link.textContent?.trim();
-        const href = link.href || '';
+      headers.forEach((th, index) => {
+        const text = th.textContent?.trim().toLowerCase() || '';
+        const dataCy = th.getAttribute('data-cy') || '';
 
-        const studentIdMatch = href.match(/student=(\d+)/);
-        const studentId = studentIdMatch ? studentIdMatch[1] : null;
+        if (text === 'class' || dataCy.includes('rosterClassId')) {
+          hasClasses = true;
+          classColIndex = index;
+        }
+        if (text === 'last name' || dataCy.includes('lastName')) {
+          lastNameColIndex = index;
+        }
+        if (text === 'first name' || dataCy.includes('firstName')) {
+          firstNameColIndex = index;
+        }
+        if (text === 'student id' || dataCy.includes('studentId')) {
+          studentIdColIndex = index;
+        }
+      });
 
-        if (name && studentId && !seenNames.has(name)) {
-          seenNames.add(name);
-          results.push({
-            ixlId: studentId,
-            name: name,
-            className: 'Default Class'
+      console.log('Has classes column:', hasClasses, 'at index:', classColIndex);
+
+      // Get all data rows
+      const rows = document.querySelectorAll('tbody tr.ixl-datatable-row');
+      console.log('Found rows:', rows.length);
+
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length === 0) return;
+
+        // Extract student ID from the studentId column or from data attributes
+        let studentId = null;
+        if (studentIdColIndex >= 0 && cells[studentIdColIndex]) {
+          studentId = cells[studentIdColIndex].textContent?.trim();
+        }
+        // Also try to get from data-cy attribute
+        const studentIdCell = row.querySelector('td[data-cy*="studentId"]');
+        if (studentIdCell) {
+          studentId = studentIdCell.textContent?.trim();
+        }
+
+        // Extract names
+        let lastName = '';
+        let firstName = '';
+
+        if (lastNameColIndex >= 0 && cells[lastNameColIndex]) {
+          // The lastName cell contains a link with the report
+          const nameLink = cells[lastNameColIndex].querySelector('a');
+          lastName = nameLink?.textContent?.trim() || cells[lastNameColIndex].textContent?.trim() || '';
+        }
+        if (firstNameColIndex >= 0 && cells[firstNameColIndex]) {
+          firstName = cells[firstNameColIndex].textContent?.trim() || '';
+        }
+
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        // Extract class name if applicable
+        let className = null;
+        if (hasClasses && classColIndex >= 0 && cells[classColIndex]) {
+          className = cells[classColIndex].textContent?.trim() || null;
+          if (className) {
+            classesSet.add(className);
+          }
+        }
+
+        // Use studentId as unique identifier, or generate from name
+        const uniqueId = studentId || fullName.replace(/\s+/g, '_');
+
+        // Deduplicate using the uniqueId (studentId) NOT fullName
+        // This prevents duplicate entries when the same student appears in multiple rows
+        if (fullName && uniqueId && !seenStudents.has(uniqueId)) {
+          seenStudents.add(uniqueId);
+          students.push({
+            ixlId: uniqueId,
+            name: fullName,
+            className: className || 'Default Class'
           });
         }
       });
 
-      return results;
+      return {
+        hasClasses,
+        students,
+        classes: Array.from(classesSet).sort()
+      };
     });
 
-    console.log('Found students:', students.length);
-    console.log('Student names:', students.map(s => s.name));
-    return students;
+    console.log('Found students:', result.students.length);
+    console.log('Has classes:', result.hasClasses);
+    if (result.hasClasses) {
+      console.log('Found classes:', result.classes);
+    }
+    console.log('Student names:', result.students.map(s => s.name));
+
+    return result;
   } catch (error) {
     console.error('Error scraping students:', error);
-    return [];
+    return { hasClasses: false, students: [], classes: [] };
   }
 }
 

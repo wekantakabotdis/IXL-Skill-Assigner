@@ -437,7 +437,19 @@ export default function App() {
 
       if (syncResult.success && syncResult.students) {
         setStudents(syncResult.students);
-        showNotification('success', `Synced ${syncResult.students.length} students!`);
+
+        // Also update groups if they're included (IXL classes)
+        if (syncResult.groups) {
+          setGroups(syncResult.groups);
+          const ixlClassCount = syncResult.groups.filter(g => g.isIxlClass).length;
+          if (ixlClassCount > 0) {
+            showNotification('success', `Synced ${syncResult.students.length} students and ${ixlClassCount} IXL classes!`);
+          } else {
+            showNotification('success', `Synced ${syncResult.students.length} students!`);
+          }
+        } else {
+          showNotification('success', `Synced ${syncResult.students.length} students!`);
+        }
       } else {
         showNotification('error', 'Failed to sync students');
       }
@@ -538,13 +550,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (queueData.allTasks.some(t => t.status === 'completed')) {
-      loadHistory();
-    }
-  }, [queueData]);
-
-  useEffect(() => {
-    if (queueData.allTasks.some(t => t.status === 'completed')) {
+    if (queueData?.allTasks?.some(t => t.status === 'completed')) {
       loadHistory();
     }
   }, [queueData]);
@@ -843,6 +849,7 @@ export default function App() {
               students={students}
               groups={groups}
               selectedStudentIds={selectedStudentIds}
+              activeGroupName={activeGroupName}
               onSelect={handleStudentSelect}
               onSync={handleSyncStudents}
               onCreateGroup={handleCreateGroup}
@@ -938,7 +945,7 @@ export default function App() {
               Add to Queue
             </button>
 
-            {(queueData.queue.length > 0 || queueData.allTasks.length > 0) && (
+            {((queueData?.queue?.length || 0) > 0 || (queueData?.allTasks?.length || 0) > 0) && (
               <div className="mt-8 p-6 rounded-xl" style={{
                 background: 'linear-gradient(135deg, rgba(139, 197, 63, 0.08) 0%, rgba(139, 197, 63, 0.04) 100%)',
                 border: '1.5px solid rgba(139, 197, 63, 0.2)'
@@ -960,7 +967,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {queueData.allTasks.filter(t => t.status === 'processing').map(task => (
+                {(queueData?.allTasks || []).filter(t => t.status === 'processing').map(task => (
                   <div key={task.id} className="mb-3 p-4 rounded-xl paper-card">
                     <div className="flex justify-between items-center">
                       <div>
@@ -981,7 +988,7 @@ export default function App() {
                   </div>
                 ))}
 
-                {queueData.queue.map((task, index) => (
+                {(queueData?.queue || []).map((task, index) => (
                   <div key={task.id} className="mb-3 p-4 rounded-xl" style={{
                     background: 'var(--ixl-white)',
                     border: '1.5px solid var(--ixl-gray)'

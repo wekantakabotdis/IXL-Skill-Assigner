@@ -178,22 +178,55 @@ app.post('/api/sync/students', async (req, res) => {
     }
 
     const page = browser.getPage();
-    const students = await scrapeStudents(page);
+    const result = await scrapeStudents(page);
 
-    console.log('Scraped students:', students.length);
+    console.log('Scraped students:', result.students.length);
+    console.log('Has classes:', result.hasClasses);
 
-    if (students.length > 0) {
-      db.updateStudents(students);
+    if (result.students.length > 0) {
+      db.updateStudents(result.students);
       console.log('Students saved to database');
+
+      // Save hasClasses setting for this account
+      db.setSetting('has_ixl_classes', result.hasClasses ? 'true' : 'false');
+
+      // If the account has classes, save them as groups
+      if (result.hasClasses && result.classes.length > 0) {
+        // Get the student IDs from the database (they now have proper IDs)
+        const dbStudents = db.getStudents();
+
+        // Build a map of class name -> student IDs
+        const studentsByClass = {};
+        result.classes.forEach(className => {
+          studentsByClass[className] = [];
+        });
+
+        // Match students by name to get their DB IDs
+        result.students.forEach(scrapedStudent => {
+          const dbStudent = dbStudents.find(s => s.name === scrapedStudent.name);
+          if (dbStudent && scrapedStudent.className && scrapedStudent.className !== 'Default Class') {
+            if (!studentsByClass[scrapedStudent.className]) {
+              studentsByClass[scrapedStudent.className] = [];
+            }
+            studentsByClass[scrapedStudent.className].push(dbStudent.id);
+          }
+        });
+
+        db.saveIxlClasses(result.classes, studentsByClass);
+        console.log('Saved IXL classes as groups:', result.classes);
+      }
     }
 
     // Return the updated list of students from the database (with IDs)
     const updatedStudents = db.getStudents();
+    const groups = db.getGroups();
 
     res.json({
       success: true,
       count: updatedStudents.length,
-      students: updatedStudents
+      students: updatedStudents,
+      hasClasses: result.hasClasses,
+      groups: groups
     });
   } catch (error) {
     console.error('Sync students error:', error);
@@ -537,11 +570,24 @@ async function processQueue() {
       const page = browser.getPage();
       const studentNames = students.map(s => s.name);
 
+      // Check if this account has IXL classes
+      const hasClassesSetting = db.getSetting('has_ixl_classes');
+      const hasClasses = hasClassesSetting === 'true';
+
+      // Check if the groupName is an IXL class (isIxlClass)
+      let isIxlClassGroup = false;
+      if (task.groupName) {
+        const groups = db.getGroups();
+        const matchingGroup = groups.find(g => g.name === task.groupName);
+        isIxlClassGroup = matchingGroup?.isIxlClass === true;
+      }
+
       const displayName = task.groupName || (studentNames.length > 1
         ? `${studentNames[0]} + ${studentNames.length - 1} more`
         : studentNames[0]);
 
       console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${displayName} (${studentNames.join(', ')})`);
+      console.log(`Account hasClasses: ${hasClasses}, isIxlClassGroup: ${isIxlClassGroup}`);
 
       const results = await assignMultipleSkills(
         page,
@@ -558,7 +604,9 @@ async function processQueue() {
           });
         },
         subject,
-        () => abortRequested
+        () => abortRequested,
+        hasClasses,
+        isIxlClassGroup ? task.groupName : null
       );
 
       // Record history

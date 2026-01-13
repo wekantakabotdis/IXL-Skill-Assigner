@@ -110,6 +110,7 @@ class DB {
       CREATE TABLE IF NOT EXISTS groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
+        is_ixl_class INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS group_members (
@@ -127,6 +128,9 @@ class DB {
     } catch (e) { }
     try {
       this.userDb.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
+    } catch (e) { }
+    try {
+      this.userDb.exec('ALTER TABLE groups ADD COLUMN is_ixl_class INTEGER DEFAULT 0');
     } catch (e) { }
   }
 
@@ -250,12 +254,12 @@ class DB {
 
   getGroups() {
     this.ensureUserDb();
-    const groups = this.userDb.prepare('SELECT * FROM groups ORDER BY name').all();
+    const groups = this.userDb.prepare('SELECT * FROM groups ORDER BY is_ixl_class DESC, name').all();
     return groups.map(group => {
       const studentIds = this.userDb.prepare('SELECT student_id FROM group_members WHERE group_id = ?')
         .all(group.id)
         .map(m => m.student_id);
-      return { ...group, studentIds };
+      return { ...group, isIxlClass: !!group.is_ixl_class, studentIds };
     });
   }
 
@@ -276,6 +280,31 @@ class DB {
   deleteGroup(id) {
     this.ensureUserDb();
     return this.userDb.prepare('DELETE FROM groups WHERE id = ?').run(id);
+  }
+
+  saveIxlClasses(classNames, studentsByClass) {
+    this.ensureUserDb();
+
+    // First, delete existing IXL class groups
+    this.userDb.prepare('DELETE FROM groups WHERE is_ixl_class = 1').run();
+
+    const transaction = this.userDb.transaction(() => {
+      for (const className of classNames) {
+        // Create the group
+        const info = this.userDb.prepare('INSERT INTO groups (name, is_ixl_class) VALUES (?, 1)').run(className);
+        const groupId = info.lastInsertRowid;
+
+        // Add students to the group
+        const students = studentsByClass[className] || [];
+        const stmt = this.userDb.prepare('INSERT OR IGNORE INTO group_members (group_id, student_id) VALUES (?, ?)');
+        for (const studentId of students) {
+          stmt.run(groupId, studentId);
+        }
+      }
+    });
+
+    transaction();
+    console.log(`Saved ${classNames.length} IXL classes as groups`);
   }
 
   updateStudentDefaultGrade(studentId, gradeLevel) {
