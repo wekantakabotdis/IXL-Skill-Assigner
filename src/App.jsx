@@ -83,7 +83,7 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [saveAccount, setSaveAccount] = useState(false);
-  const [isHeadless, setIsHeadless] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(true);
   const [showHeadlessInfo, setShowHeadlessInfo] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -249,7 +249,7 @@ export default function App() {
       try {
         const { value } = await api.getSetting('headless_mode');
         if (value !== null) {
-          setIsHeadless(value === 'true');
+          setShowBrowser(value !== 'true');
         }
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -347,10 +347,10 @@ export default function App() {
     setIsLoggingIn(true);
 
     try {
-      console.log('Starting login process...', { username, isHeadless, saveAccount });
-      showNotification('info', isHeadless ? 'Logging in (headless mode)...' : 'Opening browser...');
+      console.log('Starting login process...', { username, showBrowser, saveAccount });
+      showNotification('info', !showBrowser ? 'Logging in (headless mode)...' : 'Opening browser...');
 
-      const result = await api.login(username, password, isHeadless, saveAccount);
+      const result = await api.login(username, password, !showBrowser, saveAccount);
       console.log('Login result received:', result);
 
       if (result.success) {
@@ -739,38 +739,38 @@ export default function App() {
                     <div className="relative">
                       <input
                         type="checkbox"
-                        checked={isHeadless}
+                        checked={showBrowser}
                         onChange={(e) => {
                           const val = e.target.checked;
-                          setIsHeadless(val);
-                          api.saveSetting('headless_mode', val);
+                          setShowBrowser(val);
+                          api.saveSetting('headless_mode', !val);
                         }}
                         className="sr-only"
                       />
                       <div
                         className="w-11 h-6 rounded-full transition-all relative flex items-center"
                         style={{
-                          backgroundColor: isHeadless ? 'var(--ixl-turquoise)' : '#E5E7EB',
-                          boxShadow: isHeadless ? '0 0 0 3px rgba(0, 174, 239, 0.1)' : 'none'
+                          backgroundColor: showBrowser ? 'var(--ixl-turquoise)' : '#E5E7EB',
+                          boxShadow: showBrowser ? '0 0 0 3px rgba(0, 174, 239, 0.1)' : 'none'
                         }}
                       >
                         <div
                           className="absolute bg-white rounded-full h-4.5 w-4.5 transition-all shadow-sm"
                           style={{
-                            left: isHeadless ? '22px' : '4px',
+                            left: showBrowser ? '22px' : '4px',
                             height: '18px',
                             width: '18px'
                           }}
                         />
                       </div>
                     </div>
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Headless Mode</span>
+                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Show Browser</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setShowHeadlessInfo(!showHeadlessInfo)}
                     className="p-1 px-2 text-gray-400 hover:text-turquoise-500 hover:bg-turquoise-50 rounded-lg transition-all"
-                    title="What is Headless Mode?"
+                    title="What does Show Browser do?"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -782,7 +782,7 @@ export default function App() {
               {showHeadlessInfo && (
                 <div className="p-3 rounded-lg bg-gray-50 border border-gray-100 animate-fadeIn">
                   <p className="text-[10px] leading-relaxed text-gray-500">
-                    <strong>Headless Mode</strong> runs the automated browser in the background. You won't see a browser window open, but the login and skill assignments will still happen. This is faster and uses fewer resources, but sometimes manual interaction is needed if IXL shows a captcha or unexpected security check.
+                    <strong>Show Browser</strong> opens the automation in a visible window so you can watch what happens. Uncheck this to run faster in the background (hidden).
                   </p>
                 </div>
               )}
