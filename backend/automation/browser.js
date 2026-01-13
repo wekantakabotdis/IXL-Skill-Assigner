@@ -77,7 +77,57 @@ class IXLBrowser {
 
           await this.page.keyboard.press('Enter');
           console.log('Submitted login form. Waiting for authentication...');
+
+          // Race between successful login and error detection
+          const errorSelector = '.invalid-signin, div[role="alert"], #error-message, .error-message, .alert-danger';
+
+          try {
+            await Promise.race([
+              // Wait for successful navigation away from signin
+              this.page.waitForFunction(() => !window.location.href.includes('signin'), { timeout: 10000 }),
+              // Or wait for error message to appear
+              (async () => {
+                const errorElement = await this.page.waitForSelector(errorSelector, { timeout: 10000 });
+                if (errorElement) {
+                  const errorText = await errorElement.textContent();
+                  if (errorText && (errorText.toLowerCase().includes('invalid') ||
+                    errorText.toLowerCase().includes('incorrect') ||
+                    errorText.toLowerCase().includes('wrong'))) {
+                    throw new Error('Invalid username or password');
+                  }
+                }
+              })()
+            ]);
+          } catch (e) {
+            if (e.message === 'Invalid username or password') {
+              throw e;
+            }
+            // If we timeout, check if we're still on signin page
+            const currentUrl = this.page.url();
+            if (currentUrl.includes('signin')) {
+              // Still on signin page after 10 seconds - likely failed
+              console.log('Still on signin page after form submission - checking for errors...');
+
+              // Give it a bit more time to show an error
+              try {
+                const errorElement = await this.page.waitForSelector(errorSelector, { timeout: 5000 });
+                if (errorElement) {
+                  const errorText = await errorElement.textContent();
+                  console.log('Error message found:', errorText);
+                  throw new Error('Invalid username or password');
+                }
+              } catch (innerError) {
+                // No error message found, but still on signin page
+                console.log('No error message found, but still on signin page - assuming login failed');
+                throw new Error('Login failed - please check your credentials');
+              }
+            }
+          }
         } catch (e) {
+          if (e.message.includes('Invalid username or password') ||
+            e.message.includes('Login failed')) {
+            throw e;
+          }
           console.log('Automated login entry failed, falling back to manual wait:', e.message);
         }
       } else {
@@ -89,7 +139,7 @@ class IXLBrowser {
         console.log('Please log in manually or via automation in the opened window.');
       }
 
-      // Wait for navigation away from signin page
+      // Wait for navigation away from signin page (with longer timeout for manual login)
       // Use both URL check AND navigation events for maximum speed/reliability
       await Promise.race([
         this.page.waitForFunction(() => !window.location.href.includes('signin'), { timeout: 900000 }),
@@ -139,8 +189,17 @@ class IXLBrowser {
   }
 
   async close() {
-    if (this.browser) {
-      await this.browser.close();
+    try {
+      if (this.browser) {
+        // Use a timeout for browser close to prevent hanging
+        await Promise.race([
+          this.browser.close(),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]);
+      }
+    } catch (e) {
+      console.log('Error during browser close (likely already closed):', e.message);
+    } finally {
       this.browser = null;
       this.context = null;
       this.page = null;

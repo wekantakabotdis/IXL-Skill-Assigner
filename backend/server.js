@@ -62,14 +62,16 @@ app.post('/api/auth/login', async (req, res) => {
       console.log('Sending failure response to frontend');
       res.status(401).json({
         success: false,
-        error: 'Login cancelled or timed out'
+        error: 'Login failed. Please check your credentials.'
       });
     }
   } catch (error) {
     console.error('Login API error:', error);
-    res.status(500).json({
+    const isAuthError = error.message.includes('Invalid username or password') ||
+      error.message.includes('Login failed');
+    res.status(isAuthError ? 401 : 500).json({
       success: false,
-      error: error.message
+      error: isAuthError ? error.message : error.message
     });
   }
 });
@@ -143,8 +145,25 @@ app.get('/api/auth/status', (req, res) => {
 app.post('/api/auth/logout', async (req, res) => {
   try {
     console.log('Logout API called');
+
+    // 1. Abort any active tasks first
+    abortRequested = true;
+    assignmentQueue.length = 0;
+    for (const [taskId, task] of taskStatuses.entries()) {
+      if (task.status === 'processing' || task.status === 'queued') {
+        task.status = 'aborted';
+      }
+    }
+
+    // 2. Close browser safely
     await browser.close();
+
+    // 3. Close database entry
     db.logout();
+
+    // 4. Reset abort flag
+    setTimeout(() => { abortRequested = false; }, 500);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Logout error:', error);

@@ -319,7 +319,8 @@ export default function App() {
         await loadData();
       } else {
         console.error('Login failed:', result.error);
-        showNotification('error', result.error || 'Login failed');
+        // Specifically show the error message from the backend
+        showNotification('error', result.error || 'Login failed. Please check your credentials.');
       }
     } catch (error) {
       console.error('Login error caught:', error);
@@ -337,11 +338,12 @@ export default function App() {
       const result = await api.logout();
       if (result.success) {
         setIsAuthenticated(false);
-        setIsLoggingIn(false); // Reset logging in state just in case
-        // Don't clear username/password so they are "autoloaded" for next login
-        // but we should refresh the accounts list
-        const accounts = await api.getAccounts();
-        setSavedAccounts(accounts);
+        setIsLoggingIn(false);
+        setSelectedStudentIds([]);
+        setSelectedSkillIds([]);
+        setSubject(null);
+        setGradeLevel(null);
+        setSkills([]);
         showNotification('success', 'Signed out successfully');
       } else {
         showNotification('error', 'Logout failed: ' + result.error);
