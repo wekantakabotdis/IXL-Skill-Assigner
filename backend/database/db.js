@@ -1,13 +1,17 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 class DB {
   constructor() {
-    // Determine the correct database path
-    let dbPath;
-    let schemaPath;
+    this.sharedDb = null;
+    this.userDb = null;
+    this.userDataPath = null;
+    this.schemaPath = null;
+    this.currentUsername = null;
 
+    // Determine the correct database path
     // Check if we're running in Electron
     const isElectron = typeof process !== 'undefined' &&
       process.versions &&
@@ -16,63 +20,93 @@ class DB {
     if (isElectron) {
       try {
         const { app } = require('electron');
-
-        // Use app's user data directory for the database (writable)
-        const userDataPath = app.getPath('userData');
-        dbPath = path.join(userDataPath, 'ixl-data.db');
-
-        // Schema is in the asar archive (readable) or local in dev
+        this.userDataPath = app.getPath('userData');
         if (app.isPackaged) {
-          schemaPath = path.join(app.getAppPath(), 'backend', 'database', 'schema.sql');
+          this.schemaPath = path.join(app.getAppPath(), 'backend', 'database', 'schema.sql');
         } else {
-          schemaPath = path.join(__dirname, 'schema.sql');
+          this.schemaPath = path.join(__dirname, 'schema.sql');
         }
-
-        console.log('Electron mode - Database path:', dbPath);
-        console.log('Schema path:', schemaPath);
       } catch (e) {
-        // Electron require failed, fall back to local
-        console.log('Electron import failed, using local paths');
-        dbPath = path.join(__dirname, 'ixl-data.db');
-        schemaPath = path.join(__dirname, 'schema.sql');
+        this.userDataPath = __dirname;
+        this.schemaPath = path.join(__dirname, 'schema.sql');
       }
     } else {
-      // Development/standalone Node.js
-      console.log('Node.js mode - using local database');
-      dbPath = path.join(__dirname, 'ixl-data.db');
-      schemaPath = path.join(__dirname, 'schema.sql');
+      this.userDataPath = __dirname;
+      this.schemaPath = path.join(__dirname, 'schema.sql');
     }
 
-    this.db = new Database(dbPath);
-    this.initializeSchema(schemaPath);
+    const sharedDbPath = path.join(this.userDataPath, 'ixl-shared.db');
+
+    // Migration: if old ixl-data.db exists and shared doesn't, rename it
+    const oldDbPath = path.join(this.userDataPath, 'ixl-data.db');
+    if (fs.existsSync(oldDbPath) && !fs.existsSync(sharedDbPath)) {
+      try {
+        fs.renameSync(oldDbPath, sharedDbPath);
+        console.log('Migrated old database to ixl-shared.db');
+      } catch (e) {
+        console.error('Failed to migrate old database:', e);
+      }
+    }
+
+    this.sharedDb = new Database(sharedDbPath);
+    this.initializeSharedSchema();
   }
 
-  initializeSchema(schemaPath) {
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    this.db.exec(schema);
+  initializeSharedSchema() {
+    this.sharedDb.exec(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ixl_username TEXT UNIQUE NOT NULL,
+        ixl_password TEXT NOT NULL,
+        label TEXT,
+        last_used TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+  }
 
-    try {
-      this.db.exec('ALTER TABLE skills ADD COLUMN skill_code TEXT');
-    } catch (e) {
-    }
+  initializeUserSchema() {
+    if (!this.userDb) return;
 
-    try {
-      this.db.exec('ALTER TABLE students ADD COLUMN default_grade TEXT');
-    } catch (e) {
-    }
+    const schema = fs.readFileSync(this.schemaPath, 'utf8');
+    this.userDb.exec(schema);
 
-    try {
-      this.db.exec('ALTER TABLE students ADD COLUMN default_subject TEXT');
-    } catch (e) {
-    }
-
-    try {
-      this.db.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
-    } catch (e) {
-    }
-
-    // Ensure groups and group_members exist (in case schema.sql wasn't run)
-    this.db.exec(`
+    // Ensure user-specific tables exist (some might be added in schema.sql but we double check)
+    this.userDb.exec(`
+      CREATE TABLE IF NOT EXISTS students (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ixl_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        class_name TEXT,
+        default_grade TEXT,
+        default_subject TEXT,
+        last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS skills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ixl_id TEXT UNIQUE NOT NULL,
+        skill_code TEXT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        grade_level TEXT NOT NULL,
+        url TEXT NOT NULL,
+        display_order INTEGER,
+        subject TEXT DEFAULT 'math'
+      );
+      CREATE TABLE IF NOT EXISTS assignment_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL,
+        skill_id INTEGER NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        FOREIGN KEY (student_id) REFERENCES students(id),
+        FOREIGN KEY (skill_id) REFERENCES skills(id)
+      );
       CREATE TABLE IF NOT EXISTS groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
@@ -85,41 +119,77 @@ class DB {
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
         FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
       );
-      CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ixl_username TEXT UNIQUE NOT NULL,
-        ixl_password TEXT NOT NULL,
-        label TEXT,
-        last_used TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
     `);
+
+    // Run migrations for user tables if needed
+    try {
+      this.userDb.exec('ALTER TABLE students ADD COLUMN default_subject TEXT');
+    } catch (e) { }
+    try {
+      this.userDb.exec('ALTER TABLE skills ADD COLUMN subject TEXT DEFAULT \'math\'');
+    } catch (e) { }
   }
 
+  switchUser(username) {
+    if (this.currentUsername === username && this.userDb) return;
+
+    if (this.userDb) {
+      this.userDb.close();
+      this.userDb = null;
+    }
+
+    this.currentUsername = username;
+    const userHash = crypto.createHash('md5').update(username).digest('hex');
+    const userDbPath = path.join(this.userDataPath, `user_${userHash}.db`);
+
+    console.log(`Switching to database for user: ${username} (${userDbPath})`);
+    this.userDb = new Database(userDbPath);
+    this.initializeUserSchema();
+  }
+
+  logout() {
+    if (this.userDb) {
+      this.userDb.close();
+      this.userDb = null;
+    }
+    this.currentUsername = null;
+  }
+
+  ensureUserDb() {
+    if (!this.userDb) {
+      throw new Error('No user database active. Please log in first.');
+    }
+  }
+
+  // User-specific data methods
   getStudents() {
-    return this.db.prepare('SELECT * FROM students ORDER BY name').all();
+    this.ensureUserDb();
+    return this.userDb.prepare('SELECT * FROM students ORDER BY name').all();
   }
 
   getStudent(id) {
-    return this.db.prepare('SELECT * FROM students WHERE id = ?').get(id);
+    this.ensureUserDb();
+    return this.userDb.prepare('SELECT * FROM students WHERE id = ?').get(id);
   }
 
   addStudent(ixlId, name, className) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'INSERT INTO students (ixl_id, name, class_name) VALUES (?, ?, ?)'
     );
     return stmt.run(ixlId, name, className);
   }
 
   updateStudents(students) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       `INSERT INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))
        ON CONFLICT(ixl_id) DO UPDATE SET
          name=excluded.name,
          class_name=excluded.class_name,
          last_synced=excluded.last_synced`
     );
-    const transaction = this.db.transaction((students) => {
+    const transaction = this.userDb.transaction((students) => {
       for (const student of students) {
         stmt.run(student.ixlId, student.name, student.className);
       }
@@ -128,27 +198,20 @@ class DB {
   }
 
   updateStudentDefaults(studentId, gradeLevel, subject) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'UPDATE students SET default_grade = ?, default_subject = ? WHERE id = ?'
     );
     return stmt.run(gradeLevel, subject, studentId);
   }
 
   getLastCommonSkill(studentIds) {
+    this.ensureUserDb();
     if (!studentIds || studentIds.length === 0) return null;
 
     const placeholders = studentIds.map(() => '?').join(',');
 
-    // Find the last skill assigned to any of these students
-    // The requirement says: "the default should be whatever the last skill was assigned to all of these selected students at once"
-    // This implies we look for a skill that was assigned in the same batch (or close timestamp) to all of them.
-    // However, if no such "all at once" assignment exists, we could fall back to most recent.
-    // Let's try to find a skill that has recent entries for all selected student IDs.
-
-    // Step 1: Find the most recent skill assigned to ONE of the students
-    // Step 2: Check if that same skill was assigned to ALL of them around the same time
-
-    const recentSkill = this.db.prepare(`
+    const recentSkill = this.userDb.prepare(`
       SELECT skill_id, assigned_at 
       FROM assignment_history 
       WHERE student_id IN (${placeholders}) 
@@ -158,8 +221,7 @@ class DB {
 
     if (!recentSkill) return null;
 
-    // Check if others have this skill assigned within 5 minutes of each other
-    const matchingCount = this.db.prepare(`
+    const matchingCount = this.userDb.prepare(`
       SELECT COUNT(DISTINCT student_id) as count
       FROM assignment_history
       WHERE skill_id = ? 
@@ -168,8 +230,8 @@ class DB {
     `).get(recentSkill.skill_id, ...studentIds, recentSkill.assigned_at);
 
     if (matchingCount.count === studentIds.length) {
-      const skill = this.db.prepare('SELECT * FROM skills WHERE id = ?').get(recentSkill.skill_id);
-      const student = this.db.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
+      const skill = this.userDb.prepare('SELECT * FROM skills WHERE id = ?').get(recentSkill.skill_id);
+      const student = this.userDb.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
 
       return {
         subject: skill?.subject || student?.default_subject,
@@ -178,8 +240,7 @@ class DB {
       };
     }
 
-    // Fallback: Just return the first student's defaults if no common recent skill
-    const firstStudent = this.db.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
+    const firstStudent = this.userDb.prepare('SELECT default_grade, default_subject FROM students WHERE id = ?').get(studentIds[0]);
     return {
       subject: firstStudent?.default_subject,
       gradeLevel: firstStudent?.default_grade,
@@ -187,11 +248,11 @@ class DB {
     };
   }
 
-  // Group methods
   getGroups() {
-    const groups = this.db.prepare('SELECT * FROM groups ORDER BY name').all();
+    this.ensureUserDb();
+    const groups = this.userDb.prepare('SELECT * FROM groups ORDER BY name').all();
     return groups.map(group => {
-      const studentIds = this.db.prepare('SELECT student_id FROM group_members WHERE group_id = ?')
+      const studentIds = this.userDb.prepare('SELECT student_id FROM group_members WHERE group_id = ?')
         .all(group.id)
         .map(m => m.student_id);
       return { ...group, studentIds };
@@ -199,10 +260,11 @@ class DB {
   }
 
   createGroup(name, studentIds) {
-    const transaction = this.db.transaction((name, studentIds) => {
-      const info = this.db.prepare('INSERT INTO groups (name) VALUES (?)').run(name);
+    this.ensureUserDb();
+    const transaction = this.userDb.transaction((name, studentIds) => {
+      const info = this.userDb.prepare('INSERT INTO groups (name) VALUES (?)').run(name);
       const groupId = info.lastInsertRowid;
-      const stmt = this.db.prepare('INSERT INTO group_members (group_id, student_id) VALUES (?, ?)');
+      const stmt = this.userDb.prepare('INSERT INTO group_members (group_id, student_id) VALUES (?, ?)');
       for (const studentId of studentIds) {
         stmt.run(groupId, studentId);
       }
@@ -212,59 +274,67 @@ class DB {
   }
 
   deleteGroup(id) {
-    return this.db.prepare('DELETE FROM groups WHERE id = ?').run(id);
+    this.ensureUserDb();
+    return this.userDb.prepare('DELETE FROM groups WHERE id = ?').run(id);
   }
 
   updateStudentDefaultGrade(studentId, gradeLevel) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'UPDATE students SET default_grade = ? WHERE id = ?'
     );
     return stmt.run(gradeLevel, studentId);
   }
 
   getSkills(gradeLevel = null, subject = 'math') {
+    this.ensureUserDb();
     if (gradeLevel) {
-      return this.db.prepare(
+      return this.userDb.prepare(
         'SELECT * FROM skills WHERE grade_level = ? AND (subject = ? OR subject IS NULL) ORDER BY category, display_order'
       ).all(gradeLevel, subject);
     }
-    return this.db.prepare(
+    return this.userDb.prepare(
       'SELECT * FROM skills WHERE (subject = ? OR subject IS NULL) ORDER BY category, display_order'
     ).all(subject);
   }
 
   deleteSkillsByGrade(gradeLevel, subject) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'DELETE FROM skills WHERE grade_level = ? AND subject = ?'
     );
     return stmt.run(gradeLevel, subject);
   }
 
   getSkillsByIds(ids) {
+    this.ensureUserDb();
     const placeholders = ids.map(() => '?').join(',');
-    return this.db.prepare(
+    return this.userDb.prepare(
       `SELECT * FROM skills WHERE id IN (${placeholders})`
     ).all(...ids);
   }
 
   getSkillsByRange(category, startNum, endNum) {
-    return this.db.prepare(
+    this.ensureUserDb();
+    return this.userDb.prepare(
       'SELECT * FROM skills WHERE category = ? AND display_order >= ? AND display_order <= ? ORDER BY display_order'
     ).all(category, startNum, endNum);
   }
 
   addSkill(ixlId, name, category, gradeLevel, url, displayOrder) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'INSERT INTO skills (ixl_id, name, category, grade_level, url, display_order) VALUES (?, ?, ?, ?, ?, ?)'
     );
     return stmt.run(ixlId, name, category, gradeLevel, url, displayOrder);
   }
 
   updateSkills(skills) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'INSERT OR REPLACE INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order, subject) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    const transaction = this.db.transaction((skills) => {
+    const transaction = this.userDb.transaction((skills) => {
       for (const skill of skills) {
         stmt.run(
           skill.ixlId,
@@ -282,15 +352,17 @@ class DB {
   }
 
   recordAssignment(studentId, skillId, status, errorMessage = null) {
-    const stmt = this.db.prepare(
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
       'INSERT INTO assignment_history (student_id, skill_id, status, error_message) VALUES (?, ?, ?, ?)'
     );
     return stmt.run(studentId, skillId, status, errorMessage);
   }
 
   getAssignmentHistory(studentId = null, limit = 100) {
+    this.ensureUserDb();
     if (studentId) {
-      return this.db.prepare(
+      return this.userDb.prepare(
         `SELECT ah.*, s.name as student_name, sk.name as skill_name 
          FROM assignment_history ah 
          JOIN students s ON ah.student_id = s.id 
@@ -300,7 +372,7 @@ class DB {
          LIMIT ?`
       ).all(studentId, limit);
     }
-    return this.db.prepare(
+    return this.userDb.prepare(
       `SELECT ah.*, s.name as student_name, sk.name as skill_name 
        FROM assignment_history ah 
        JOIN students s ON ah.student_id = s.id 
@@ -310,25 +382,25 @@ class DB {
     ).all(limit);
   }
 
+  // Shared data methods
   getSetting(key) {
-    const result = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    const result = this.sharedDb.prepare('SELECT value FROM settings WHERE key = ?').get(key);
     return result ? result.value : null;
   }
 
   setSetting(key, value) {
-    const stmt = this.db.prepare(
+    const stmt = this.sharedDb.prepare(
       'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
     );
     return stmt.run(key, value);
   }
 
-  // Account methods
   getAccounts() {
-    return this.db.prepare('SELECT * FROM accounts ORDER BY last_used DESC, created_at DESC').all();
+    return this.sharedDb.prepare('SELECT * FROM accounts ORDER BY last_used DESC, created_at DESC').all();
   }
 
   saveAccount(username, password, label) {
-    const stmt = this.db.prepare(`
+    const stmt = this.sharedDb.prepare(`
       INSERT INTO accounts (ixl_username, ixl_password, label) 
       VALUES (?, ?, ?)
       ON CONFLICT(ixl_username) DO UPDATE SET
@@ -339,15 +411,16 @@ class DB {
   }
 
   deleteAccount(id) {
-    return this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+    return this.sharedDb.prepare('DELETE FROM accounts WHERE id = ?').run(id);
   }
 
   updateAccountLastUsed(id) {
-    return this.db.prepare('UPDATE accounts SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    return this.sharedDb.prepare('UPDATE accounts SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   }
 
   close() {
-    this.db.close();
+    if (this.sharedDb) this.sharedDb.close();
+    if (this.userDb) this.userDb.close();
   }
 }
 

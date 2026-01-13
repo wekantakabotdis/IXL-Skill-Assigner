@@ -27,6 +27,7 @@ app.post('/api/auth/login', async (req, res) => {
     console.log('Browser login returned:', success);
 
     if (success) {
+      db.switchUser(username);
       const cookies = await browser.saveCookies();
 
       if (saveAccount && username && password) {
@@ -143,6 +144,7 @@ app.post('/api/auth/logout', async (req, res) => {
   try {
     console.log('Logout API called');
     await browser.close();
+    db.logout();
     res.json({ success: true });
   } catch (error) {
     console.error('Logout error:', error);
