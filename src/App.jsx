@@ -97,7 +97,7 @@ export default function App() {
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
   const [gradeLevel, setGradeLevel] = useState(null);
-  const [activeGroupName, setActiveGroupName] = useState(null);
+  const [selectedGroupNames, setSelectedGroupNames] = useState([]);
   const [actionMode, setActionMode] = useState('suggest');
 
   const [isAssigning, setIsAssigning] = useState(false);
@@ -387,9 +387,7 @@ export default function App() {
       if (result.success) {
         setIsAuthenticated(false);
         setIsLoggingIn(false);
-        if (activeGroupName) {
-          setActiveGroupName(null);
-        }
+        setSelectedGroupNames([]);
         setSelectedStudentIds([]);
         setSelectedSkillIds([]);
         setSubject(null);
@@ -475,9 +473,9 @@ export default function App() {
     }
   };
 
-  const handleStudentSelect = (ids, groupName = null) => {
+  const handleStudentSelect = (ids, groupNames = []) => {
     setSelectedStudentIds(ids);
-    setActiveGroupName(groupName);
+    setSelectedGroupNames(groupNames);
   };
 
   const handleSyncStudents = async () => {
@@ -556,7 +554,7 @@ export default function App() {
     const studentIds = selectedStudentIds;
 
     try {
-      const result = await api.assignSkills(studentIds, skillIds, actionMode, activeGroupName);
+      const result = await api.assignSkills(studentIds, skillIds, actionMode, selectedGroupNames);
 
       if (result.taskId) {
         showNotification('success', `Task queued for ${studentIds.length} students and ${skillIds.length} skills.`);
@@ -573,9 +571,7 @@ export default function App() {
           console.error('Error saving student defaults:', error);
         }
 
-        if (activeGroupName) {
-          setActiveGroupName(null);
-        }
+        setSelectedGroupNames([]);
         setSelectedSkillIds([]);
         setSelectedStudentIds([]);
         setSubject(null);
@@ -903,7 +899,7 @@ export default function App() {
               students={students}
               groups={groups}
               selectedStudentIds={selectedStudentIds}
-              activeGroupName={activeGroupName}
+              selectedGroupNames={selectedGroupNames}
               onSelect={handleStudentSelect}
               onSync={handleSyncStudents}
               onCreateGroup={handleCreateGroup}

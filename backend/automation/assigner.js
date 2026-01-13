@@ -167,7 +167,7 @@ async function getSuggestionIcon(skillNode) {
   return suggestionIcon;
 }
 
-async function assignSkill(page, skillData, studentNames, action = 'suggest', isPlanBased = false, hasClasses = false, groupName = null) {
+async function assignSkill(page, skillData, action = 'suggest', isPlanBased = false, hasClasses = false, targets = { classes: [], students: [] }) {
   const { skillCode, dataSkillId } = skillData;
   console.log(`Processing skill ${skillCode}...`);
 
@@ -248,28 +248,45 @@ async function assignSkill(page, skillData, studentNames, action = 'suggest', is
       if (!await checkDropdownVisible(page)) throw new Error(`Dropdown failed for ${skillCode}`);
     }
 
-    // Determine if we're assigning to a class or individual students
-    let dropdownResults;
-    if (hasClasses && groupName && groupName !== 'All Students') {
-      // Assigning to an IXL class - click the class star directly
-      console.log(`Assigning to IXL class "${groupName}"...`);
-      dropdownResults = await selectClassInDropdown(page, groupName, action);
-    } else {
-      // Assigning to individual students
-      dropdownResults = await selectStudentsInDropdown(page, studentNames, action, hasClasses);
+    const results = [];
+
+    // 1. Assign to classes
+    if (hasClasses && targets.classes && targets.classes.length > 0) {
+      for (const className of targets.classes) {
+        console.log(`Assigning to IXL class "${className}"...`);
+        const res = await selectClassInDropdown(page, className, action);
+        results.push(...res);
+      }
     }
+
+    // 2. Assign to individual students
+    if (targets.students && targets.students.length > 0) {
+      console.log(`Assigning to individual students...`);
+      const res = await selectStudentsInDropdown(page, targets.students, action, hasClasses);
+      results.push(...res);
+    }
+
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
 
-    return dropdownResults.map(r => ({ ...r, skillCode, success: r.success, error: r.error }));
+    return results.map(r => ({ ...r, skillCode, success: r.success, error: r.error }));
   } catch (err) {
     console.error(`Error for ${skillCode}: ${err.message}`);
     await page.keyboard.press('Escape').catch(() => { });
-    return studentNames.map(name => ({ studentName: name, skillCode, success: false, error: err.message }));
+
+    // Create failure results for all targets
+    const failedResults = [];
+    if (targets.classes) {
+      targets.classes.forEach(c => failedResults.push({ studentName: c, isClass: true, skillCode, success: false, error: err.message }));
+    }
+    if (targets.students) {
+      targets.students.forEach(s => failedResults.push({ studentName: s, skillCode, success: false, error: err.message }));
+    }
+    return failedResults;
   }
 }
 
-async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, action = 'suggest', progressCallback, subject = 'math', abortChecker = null, hasClasses = false, groupName = null) {
+async function assignMultipleSkills(page, skillsData, gradeLevel, action = 'suggest', progressCallback, subject = 'math', abortChecker = null, hasClasses = false, targets = { classes: [], students: [] }) {
   const allResults = [];
   const isPlanBased = subject.startsWith('njsla-') || subject.startsWith('njgpa-');
 
@@ -301,8 +318,8 @@ async function assignMultipleSkills(page, skillsData, studentNames, gradeLevel, 
     const displayName = isPlanBased ? (skill.skillName || skill.skillCode) : skill.skillCode;
     if (progressCallback) progressCallback({ current: i, total: skillsData.length, currentSkill: displayName });
 
-    const skillResults = await assignSkill(page, skill, studentNames, action, isPlanBased, hasClasses, groupName);
-    allResults.push(...skillResults);
+    const result = await assignSkill(page, skill, action, isPlanBased, hasClasses, targets);
+    allResults.push(...result);
 
     if (i < skillsData.length - 1) await page.waitForTimeout(100); // Fixed 100ms instead of humanDelay
   }

@@ -568,31 +568,43 @@ async function processQueue() {
       const gradeLevel = skills[0].grade_level || skills[0].gradeLevel;
       const subject = skills[0].subject || 'math';
       const page = browser.getPage();
-      const studentNames = students.map(s => s.name);
 
       // Check if this account has IXL classes
       const hasClassesSetting = db.getSetting('has_ixl_classes');
       const hasClasses = hasClassesSetting === 'true';
 
-      // Check if the groupName is an IXL class (isIxlClass)
-      let isIxlClassGroup = false;
-      if (task.groupName) {
-        const groups = db.getGroups();
-        const matchingGroup = groups.find(g => g.name === task.groupName);
-        isIxlClassGroup = matchingGroup?.isIxlClass === true;
-      }
+      // Calculate Targets (Classes vs Individual Students)
+      const allGroups = db.getGroups();
+      const targets = { classes: [], students: [] };
+      const coveredStudentIds = new Set();
 
-      const displayName = task.groupName || (studentNames.length > 1
-        ? `${studentNames[0]} + ${studentNames.length - 1} more`
-        : studentNames[0]);
+      const groupNames = task.groupNames || (task.groupName ? [task.groupName] : []);
 
-      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsugesting'} ${skillsData.length} skills to ${displayName} (${studentNames.join(', ')})`);
-      console.log(`Account hasClasses: ${hasClasses}, isIxlClassGroup: ${isIxlClassGroup}`);
+      // 1. Identify IXL Classes
+      groupNames.forEach(name => {
+        const group = allGroups.find(g => g.name === name);
+        if (group && group.isIxlClass) {
+          targets.classes.push(name);
+          group.studentIds.forEach(id => coveredStudentIds.add(id));
+        }
+      });
+
+      // 2. Identify remaining individual students
+      const individualStudentIds = task.studentIds.filter(id => !coveredStudentIds.has(id));
+      const individualStudents = individualStudentIds.map(id => db.getStudent(id)).filter(Boolean);
+      individualStudents.forEach(s => targets.students.push(s.name));
+
+      const displayName = groupNames.length > 0
+        ? `${groupNames.join(', ')} + ${individualStudents.length} individuals`
+        : (students.length > 1 ? `${students[0].name} + ${students.length - 1} more` : students[0].name);
+
+      console.log(`${task.action === 'suggest' ? 'Suggesting' : 'Unsuggesting'} ${skillsData.length} skills to:`);
+      console.log(`- Classes: ${targets.classes.join(', ') || 'None'}`);
+      console.log(`- Individual Students: ${targets.students.join(', ') || 'None'}`);
 
       const results = await assignMultipleSkills(
         page,
         skillsData,
-        studentNames,
         gradeLevel,
         task.action,
         (progress) => {
@@ -606,12 +618,11 @@ async function processQueue() {
         subject,
         () => abortRequested,
         hasClasses,
-        isIxlClassGroup ? task.groupName : null
+        targets
       );
 
       // Generate a batch ID for this assignment task
-      const batchId = crypto.randomUUID();
-      const batchGroupName = task.groupName || null;
+      const batchId = uuidv4();
 
       // Record history
       results.forEach((result) => {
@@ -622,11 +633,9 @@ async function processQueue() {
             // This was a class assignment - record for all students in the class
             const groupName = result.studentName;
             // Find the group to get its members
-            const allGroups = db.getGroups();
             const group = allGroups.find(g => g.name === groupName && g.isIxlClass);
 
             if (group && group.studentIds && group.studentIds.length > 0) {
-              console.log(`Recording class assignment for group "${groupName}" (${group.studentIds.length} students)`);
               group.studentIds.forEach(studentId => {
                 db.recordAssignment(
                   studentId,
@@ -647,13 +656,23 @@ async function processQueue() {
             // Individual student assignment
             const student = students.find(s => s.name === result.studentName);
             if (student) {
+              // Try to find a non-IXL-class group from selected groups that contains this student
+              let assignedGroupName = null;
+              for (const gName of groupNames) {
+                const g = allGroups.find(grp => grp.name === gName);
+                if (g && !g.isIxlClass && g.studentIds.includes(student.id)) {
+                  assignedGroupName = gName;
+                  break;
+                }
+              }
+
               db.recordAssignment(
                 student.id,
                 skill.id,
                 result.success ? 'completed' : 'failed',
                 result.error || null,
                 batchId,
-                batchGroupName // Use the task's group name if available (e.g. custom group)
+                assignedGroupName
               );
               if (gradeLevel && subject) {
                 db.updateStudentDefaults(student.id, gradeLevel, subject);
