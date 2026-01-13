@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from './utils/api';
 import { parseRange } from './utils/skillHelpers';
 import StudentSelector from './components/StudentSelector';
@@ -136,34 +136,78 @@ export default function App() {
     }
   };
 
-  const getGroupedHistory = () => {
+  // Helper function to group history by batch
+  const groupHistory = (history) => {
     if (!history.length) return [];
 
     const sortedHistory = [...history].sort((a, b) => new Date(b.assigned_at) - new Date(a.assigned_at));
-    const groups = [];
-    let currentGroup = null;
+    const batchesMap = new Map();
 
     sortedHistory.forEach((item) => {
-      const itemTime = new Date(item.assigned_at).getTime();
+      // Use batch_id if available, otherwise fallback to 60s time window grouping
+      let batchId = item.batch_id;
+      if (!batchId) {
+        // Legacy grouping by time window
+        const timeKey = Math.floor(new Date(item.assigned_at).getTime() / 60000);
+        batchId = `legacy-${timeKey}`;
+      }
 
-      if (currentGroup &&
-        currentGroup.student_id === item.student_id &&
-        Math.abs(currentGroup.timestamp - itemTime) < 60000) {
-        currentGroup.items.push(item);
-      } else {
-        if (currentGroup) groups.push(currentGroup);
-        currentGroup = {
-          id: `batch-${item.id}`,
-          timestamp: itemTime,
+      if (!batchesMap.has(batchId)) {
+        batchesMap.set(batchId, {
+          id: batchId,
+          timestamp: new Date(item.assigned_at).getTime(),
           date: new Date(item.assigned_at.endsWith('Z') ? item.assigned_at : item.assigned_at + 'Z'),
-          student_name: item.student_name,
-          student_id: item.student_id,
-          items: [item]
-        };
+          groups: new Map(), // groupName -> { name, students: Map<studentId, {name, items}> }
+          individuals: new Map(), // studentId -> { name, items: [] }
+          totalSkills: 0
+        });
+      }
+
+      const batch = batchesMap.get(batchId);
+      batch.totalSkills++;
+
+      if (item.group_name) {
+        // It's part of a group assignment
+        if (!batch.groups.has(item.group_name)) {
+          batch.groups.set(item.group_name, {
+            type: 'group',
+            name: item.group_name,
+            students: new Map()
+          });
+        }
+        const group = batch.groups.get(item.group_name);
+
+        if (!group.students.has(item.student_id)) {
+          group.students.set(item.student_id, {
+            id: item.student_id,
+            name: item.student_name,
+            items: []
+          });
+        }
+        group.students.get(item.student_id).items.push(item);
+      } else {
+        // Individual assignment
+        if (!batch.individuals.has(item.student_id)) {
+          batch.individuals.set(item.student_id, {
+            type: 'student',
+            id: item.student_id,
+            name: item.student_name,
+            items: []
+          });
+        }
+        batch.individuals.get(item.student_id).items.push(item);
       }
     });
-    if (currentGroup) groups.push(currentGroup);
-    return groups;
+
+    // Convert Maps to Arrays for rendering
+    return Array.from(batchesMap.values()).map(batch => ({
+      ...batch,
+      groups: Array.from(batch.groups.values()).map(g => ({
+        ...g,
+        students: Array.from(g.students.values())
+      })),
+      individuals: Array.from(batch.individuals.values())
+    }));
   };
 
   const toggleBatch = (batchId) => {
@@ -177,6 +221,10 @@ export default function App() {
       return next;
     });
   };
+
+  const getGroupedHistory = useCallback(() => {
+    return groupHistory(history);
+  }, [history]);
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -210,7 +258,7 @@ export default function App() {
 
     fetchAccounts();
     fetchSettings();
-  }, []);
+  }, [username]);
 
   const handleDeleteAccount = async (id, e) => {
     e.stopPropagation();
@@ -1030,7 +1078,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-4">
               {getGroupedHistory().length === 0 ? (
                 <div className="p-12 text-center" style={{ color: 'var(--ixl-gray-dark)' }}>
                   <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="currentColor" viewBox="0 0 20 20">
@@ -1040,68 +1088,93 @@ export default function App() {
                   <p className="text-sm mt-2">Assignments you create will appear here in batches.</p>
                 </div>
               ) : (
-                getGroupedHistory().map((group) => {
-                  const isExpanded = expandedBatches.has(group.id);
-                  const successCount = group.items.filter(i => i.status === 'completed').length;
-                  const failCount = group.items.length - successCount;
-                  const hasFailures = failCount > 0;
+                getGroupedHistory().map((batch) => {
+                  const isExpanded = expandedBatches.has(batch.id);
 
-                  return (
-                    <div key={group.id} className="rounded-lg overflow-hidden border transition-all duration-300" style={{
-                      borderColor: hasFailures ? 'rgba(239, 68, 68, 0.3)' : 'rgba(139, 197, 63, 0.3)',
-                      background: hasFailures ? 'rgba(254, 242, 242, 0.5)' : 'rgba(240, 253, 244, 0.5)'
-                    }}>
-                      <div className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ background: hasFailures ? '#ef4444' : 'var(--ixl-green)' }}
-                            title={hasFailures ? `${failCount} failed` : 'All successful'}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm" style={{ color: 'var(--ixl-text)' }}>
-                                {group.student_name}
-                              </span>
-                              <span className="text-xs" style={{ color: 'var(--ixl-gray-dark)' }}>
-                                • {group.items.length} skills
-                              </span>
-                            </div>
-                            <div className="text-xs" style={{ color: 'var(--ixl-gray-dark)' }}>
-                              {group.date.toLocaleDateString()} at {group.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
+                  // Helper to render a Student row (used in both Group and Individual contexts)
+                  const renderStudentRow = (student, keyPrefix) => {
+                    const successCount = student.items.filter(i => i.status === 'completed').length;
+                    const failCount = student.items.length - successCount;
+                    const hasFailures = failCount > 0;
+
+                    return (
+                      <div key={`${keyPrefix}-${student.id}`} className="ml-4 border-l-2 pl-3 py-1" style={{ borderColor: 'var(--ixl-gray)' }}>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{ background: hasFailures ? '#ef4444' : 'var(--ixl-green)' }}
+                            />
+                            <span className="font-medium">{student.name}</span>
                           </div>
+                          <span className="text-xs text-gray-500">{student.items.length} skills</span>
                         </div>
-                        <button
-                          onClick={() => toggleBatch(group.id)}
-                          className="px-3 py-1 rounded-md text-xs font-medium transition-all hover:opacity-80"
-                          style={{
-                            background: 'rgba(0, 174, 239, 0.1)',
-                            color: 'var(--ixl-turquoise-dark)'
-                          }}
-                        >
-                          {isExpanded ? '▲ Hide' : '▼ Show'}
-                        </button>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="border-t bg-white" style={{ borderColor: 'var(--ixl-gray)' }}>
-                          {group.items.map((item) => (
-                            <div key={item.id} className="px-3 py-2 flex items-center gap-2 border-b last:border-0" style={{ borderColor: 'var(--ixl-gray)' }}>
-                              <div
-                                className="w-2 h-2 rounded-full flex-shrink-0"
-                                style={{ background: item.status === 'completed' ? 'var(--ixl-green)' : '#ef4444' }}
-                              />
-                              <span className="text-sm flex-1" style={{ color: 'var(--ixl-text)' }}>
-                                {item.skill_name}
+                        <div className="space-y-1">
+                          {student.items.map(item => (
+                            <div key={item.id} className="flex items-center gap-2 text-xs text-gray-600 ml-4">
+                              <span style={{ color: item.status === 'completed' ? 'var(--ixl-green-dark)' : '#ef4444' }}>
+                                {item.status === 'completed' ? '✓' : '✗'}
                               </span>
-                              {item.status !== 'completed' && item.error_message && (
-                                <span className="text-xs text-red-500 truncate max-w-[150px]" title={item.error_message}>
-                                  {item.error_message}
+                              <span>{item.skill_name}</span>
+                              {item.error_message && (
+                                <span className="text-red-400" title={item.error_message}>
+                                  ({item.error_message})
                                 </span>
                               )}
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div key={batch.id} className="rounded-lg border bg-white shadow-sm overflow-hidden" style={{ borderColor: 'var(--ixl-gray)' }}>
+                      {/* Batch Header */}
+                      <div className="p-3 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleBatch(batch.id)}>
+                        <div className="flex items-center gap-3">
+                          <div className="bg-blue-100 text-blue-700 p-1.5 rounded-md">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-gray-800">
+                              {batch.date.toLocaleDateString()} at {batch.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {batch.totalSkills} skills assigned • {batch.groups.length > 0 ? `${batch.groups.length} groups` : ''} {batch.individuals.length > 0 ? `${batch.individuals.length} students` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <button className="text-gray-400 hover:text-gray-600">
+                          {isExpanded ? '▲' : '▼'}
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="p-3 space-y-3 bg-white">
+                          {/* Groups */}
+                          {batch.groups.map(group => (
+                            <div key={group.name} className="border rounded-md p-2 border-dashed" style={{ borderColor: 'var(--ixl-green-light)' }}>
+                              <div className="flex items-center gap-2 mb-2 font-medium text-sm text-gray-700">
+                                <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded">Group</span>
+                                {group.name}
+                                <span className="text-xs text-gray-400 font-normal">({group.students.length} students)</span>
+                              </div>
+                              <div className="space-y-2">
+                                {group.students.map(student => renderStudentRow(student, `grp-${batch.id}-${group.name}`))}
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Individual Students */}
+                          {batch.individuals.length > 0 && (
+                            <div className="space-y-2">
+                              {batch.individuals.map(student => renderStudentRow(student, `ind-${batch.id}`))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

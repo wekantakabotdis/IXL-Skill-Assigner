@@ -609,7 +609,10 @@ async function processQueue() {
         isIxlClassGroup ? task.groupName : null
       );
 
-      // Record history
+      // Generate a batch ID for this assignment task
+      const batchId = crypto.randomUUID();
+      const batchGroupName = task.groupName || null;
+
       // Record history
       results.forEach((result) => {
         const skill = skills.find(sk => (sk.skill_code || sk.skillCode) === result.skillCode);
@@ -629,7 +632,9 @@ async function processQueue() {
                   studentId,
                   skill.id,
                   result.success ? 'completed' : 'failed',
-                  result.error || null
+                  result.error || null,
+                  batchId,
+                  groupName // Use the actual class name as group name
                 );
                 if (gradeLevel && subject) {
                   db.updateStudentDefaults(studentId, gradeLevel, subject);
@@ -646,7 +651,9 @@ async function processQueue() {
                 student.id,
                 skill.id,
                 result.success ? 'completed' : 'failed',
-                result.error || null
+                result.error || null,
+                batchId,
+                batchGroupName // Use the task's group name if available (e.g. custom group)
               );
               if (gradeLevel && subject) {
                 db.updateStudentDefaults(student.id, gradeLevel, subject);

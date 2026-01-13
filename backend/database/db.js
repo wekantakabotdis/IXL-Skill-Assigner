@@ -99,6 +99,8 @@ class DB {
       );
       CREATE TABLE IF NOT EXISTS assignment_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT,
+        group_name TEXT,
         student_id INTEGER NOT NULL,
         skill_id INTEGER NOT NULL,
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +134,12 @@ class DB {
     try {
       this.userDb.exec('ALTER TABLE groups ADD COLUMN is_ixl_class INTEGER DEFAULT 0');
     } catch (e) { }
+    try {
+      this.userDb.exec('ALTER TABLE assignment_history ADD COLUMN batch_id TEXT');
+    } catch (e) { }
+    try {
+      this.userDb.exec('ALTER TABLE assignment_history ADD COLUMN group_name TEXT');
+    } catch (e) { }
   }
 
   switchUser(username) {
@@ -163,6 +171,37 @@ class DB {
     if (!this.userDb) {
       throw new Error('No user database active. Please log in first.');
     }
+  }
+
+  getAssignmentHistory(studentId = null, limit = 100) {
+    this.ensureUserDb();
+    if (studentId) {
+      return this.userDb.prepare(
+        `SELECT ah.*, s.name as student_name, sk.name as skill_name, ah.batch_id, ah.group_name
+         FROM assignment_history ah
+         JOIN students s ON ah.student_id = s.id
+         JOIN skills sk ON ah.skill_id = sk.id
+         WHERE ah.student_id = ?
+         ORDER BY ah.assigned_at DESC
+         LIMIT ?`
+      ).all(studentId, limit);
+    }
+    return this.userDb.prepare(
+      `SELECT ah.*, s.name as student_name, sk.name as skill_name, ah.batch_id, ah.group_name
+       FROM assignment_history ah
+       JOIN students s ON ah.student_id = s.id
+       JOIN skills sk ON ah.skill_id = sk.id
+       ORDER BY ah.assigned_at DESC
+       LIMIT ?`
+    ).all(limit);
+  }
+
+  recordAssignment(studentId, skillId, status, errorMessage = null, batchId = null, groupName = null) {
+    this.ensureUserDb();
+    const stmt = this.userDb.prepare(
+      'INSERT INTO assignment_history (student_id, skill_id, status, error_message, batch_id, group_name) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    return stmt.run(studentId, skillId, status, errorMessage, batchId, groupName);
   }
 
   // User-specific data methods
