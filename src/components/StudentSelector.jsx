@@ -77,7 +77,6 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
     }
 
     onSelect(Array.from(newIds), newGroupNames);
-    setIsOpen(false);
     setSearchQuery('');
   };
 
