@@ -419,37 +419,6 @@ class DB {
     transaction(skills);
   }
 
-  recordAssignment(studentId, skillId, status, errorMessage = null) {
-    this.ensureUserDb();
-    const stmt = this.userDb.prepare(
-      'INSERT INTO assignment_history (student_id, skill_id, status, error_message) VALUES (?, ?, ?, ?)'
-    );
-    return stmt.run(studentId, skillId, status, errorMessage);
-  }
-
-  getAssignmentHistory(studentId = null, limit = 100) {
-    this.ensureUserDb();
-    if (studentId) {
-      return this.userDb.prepare(
-        `SELECT ah.*, s.name as student_name, sk.name as skill_name 
-         FROM assignment_history ah 
-         JOIN students s ON ah.student_id = s.id 
-         JOIN skills sk ON ah.skill_id = sk.id 
-         WHERE ah.student_id = ? 
-         ORDER BY ah.assigned_at DESC 
-         LIMIT ?`
-      ).all(studentId, limit);
-    }
-    return this.userDb.prepare(
-      `SELECT ah.*, s.name as student_name, sk.name as skill_name 
-       FROM assignment_history ah 
-       JOIN students s ON ah.student_id = s.id 
-       JOIN skills sk ON ah.skill_id = sk.id 
-       ORDER BY ah.assigned_at DESC 
-       LIMIT ?`
-    ).all(limit);
-  }
-
   // Shared data methods
   getSetting(key) {
     const result = this.sharedDb.prepare('SELECT value FROM settings WHERE key = ?').get(key);

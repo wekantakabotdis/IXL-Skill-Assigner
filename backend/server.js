@@ -367,7 +367,7 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/assign', async (req, res) => {
   try {
-    const { studentIds, skillIds, action = 'suggest', groupName = null } = req.body;
+    const { studentIds, skillIds, action = 'suggest', groupName = null, groupNames = [] } = req.body;
 
     if (!studentIds || studentIds.length === 0 || !skillIds || skillIds.length === 0) {
       return res.status(400).json({
@@ -379,6 +379,24 @@ app.post('/api/assign', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
+    const allGroups = db.getGroups();
+    const coveredStudentIds = new Set();
+    const targetGroups = [];
+    const actualGroupNames = groupNames.length > 0 ? groupNames : (groupName ? [groupName] : []);
+
+    actualGroupNames.forEach(name => {
+      const group = allGroups.find(g => g.name === name);
+      if (group) {
+        targetGroups.push({ name, count: group.studentIds.length, isIxlClass: !!group.isIxlClass });
+        if (group.isIxlClass) {
+          group.studentIds.forEach(id => coveredStudentIds.add(id));
+        }
+      }
+    });
+
+    const individualStudentIds = studentIds.filter(id => !coveredStudentIds.has(id));
+    const individualStudents = individualStudentIds.map(id => db.getStudent(id)?.name).filter(Boolean);
+
     const taskId = uuidv4();
     const task = {
       id: taskId,
@@ -386,9 +404,12 @@ app.post('/api/assign', async (req, res) => {
       skillIds,
       action,
       groupName,
+      groupNames: actualGroupNames,
+      targetGroups,
+      individualStudents,
       status: 'queued',
       progress: 0,
-      total: skillIds.length, // Always skill-based count now
+      total: skillIds.length,
       results: []
     };
 
@@ -436,13 +457,9 @@ app.get('/api/history', (req, res) => {
 app.get('/api/queue', (req, res) => {
   try {
     const queueWithDetails = assignmentQueue.map(task => {
-      const firstStudent = db.getStudent(task.studentIds[0]);
       const skills = db.getSkillsByIds(task.skillIds);
       return {
         ...task,
-        studentName: task.groupName || (task.studentIds.length > 1
-          ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
-          : firstStudent?.name || 'Unknown'),
         skillCodes: skills.map(s => {
           const isPlanSub = (s.subject || '').startsWith('njsla-') || (s.subject || '').startsWith('njgpa-');
           const isBulleted = s.skill_code?.includes('.new') || !(s.skill_code?.match(/\.\d+$/));
@@ -454,12 +471,8 @@ app.get('/api/queue', (req, res) => {
     });
 
     const allTasks = Array.from(taskStatuses.values()).map(task => {
-      const firstStudent = db.getStudent(task.studentIds[0]);
       return {
-        ...task,
-        studentName: task.groupName || (task.studentIds.length > 1
-          ? `${firstStudent?.name || 'Unknown'} + ${task.studentIds.length - 1} more`
-          : firstStudent?.name || 'Unknown')
+        ...task
       };
     });
 

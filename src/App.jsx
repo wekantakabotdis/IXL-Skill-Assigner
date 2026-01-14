@@ -1018,42 +1018,102 @@ export default function App() {
                 </div>
 
                 {(queueData?.allTasks || []).filter(t => t.status === 'processing').map(task => (
-                  <div key={task.id} className="mb-3 p-4 rounded-xl paper-card">
-                    <div className="flex justify-between items-center">
+                  <div key={task.id} className="mb-3 p-4 rounded-xl paper-card border-none shadow-sm" style={{
+                    background: 'var(--ixl-white)',
+                    border: '1.5px solid rgba(139, 197, 63, 0.4)'
+                  }}>
+                    <div className="flex justify-between items-start mb-3">
                       <div>
-                        <span className="font-semibold" style={{ color: 'var(--ixl-text)' }}>{task.studentName}</span>
-                        <span className="text-sm ml-2" style={{ color: 'var(--ixl-gray-dark)' }}>
+                        {(task.targetGroups?.length > 0 || task.individualStudents?.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mb-1 items-center">
+                            {task.targetGroups?.map(g => (
+                              <span key={g.name} className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                                </svg>
+                                {g.name}
+                              </span>
+                            ))}
+                            {task.individualStudents?.map(name => (
+                              <span key={name} className="bg-turquoise-50 text-turquoise-700 text-[10px] px-1.5 py-0.5 rounded font-bold border border-turquoise-100 flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="font-semibold text-gray-800">
+                          {task.studentName}
+                        </span>
+                        <span className="text-sm ml-2 text-gray-500">
                           ({task.progress || 0}/{task.total} skills)
                         </span>
                       </div>
-                      <span className="badge badge-info">
-                        Processing...
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold animate-pulse">
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                        Processing
                       </span>
                     </div>
+
                     {task.currentSkill && (
-                      <div className="text-xs mt-2" style={{ color: 'var(--ixl-gray-dark)' }}>
-                        Current: {task.currentSkill}
+                      <div className="text-xs p-2 bg-gray-50 rounded-lg flex items-center gap-2 border border-gray-100 italic">
+                        <svg className="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-gray-600 truncate">Current: {task.currentSkill}</span>
                       </div>
                     )}
                   </div>
                 ))}
 
                 {(queueData?.queue || []).map((task, index) => (
-                  <div key={task.id} className="mb-3 p-4 rounded-xl" style={{
-                    background: 'var(--ixl-white)',
-                    border: '1.5px solid var(--ixl-gray)'
-                  }}>
-                    <div className="flex justify-between items-center">
+                  <div key={task.id} className="mb-3 p-4 rounded-xl bg-white border-2 border-dashed border-gray-200">
+                    <div className="flex justify-between items-start mb-2">
                       <div>
-                        <span className="font-semibold" style={{ color: 'var(--ixl-text)' }}>{task.studentName}</span>
-                        <span className="text-sm ml-2" style={{ color: 'var(--ixl-gray-dark)' }}>
+                        {(task.targetGroups?.length > 0 || task.individualStudents?.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mb-1 items-center">
+                            {task.targetGroups?.map(g => (
+                              <span key={g.name} className="bg-orange-50 text-orange-600 text-[10px] px-1.5 py-0.5 rounded font-semibold border border-orange-100 flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                                </svg>
+                                {g.name}
+                              </span>
+                            ))}
+                            {task.individualStudents?.map(name => (
+                              <span key={name} className="bg-turquoise-50 text-turquoise-700 text-[10px] px-1.5 py-0.5 rounded font-semibold border border-turquoise-100 flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="font-medium text-gray-700">{task.studentName}</span>
+                        <span className="text-xs ml-2 text-gray-400">
                           ({task.total} skills)
                         </span>
                       </div>
-                      <span className="badge badge-pending">
+                      <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded text-[10px] font-bold tracking-wider uppercase">
                         Queued #{index + 1}
                       </span>
                     </div>
+                    {task.skillCodes && task.skillCodes.length > 0 && (
+                      <div className="flex flex-wrap gap-1 opacity-60 pointer-events-none">
+                        {task.skillCodes.slice(0, 3).map(code => (
+                          <span key={code} className="text-[9px] px-1.5 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-400">
+                            {code}
+                          </span>
+                        ))}
+                        {task.skillCodes.length > 3 && (
+                          <span className="text-[9px] text-gray-400">+{task.skillCodes.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
