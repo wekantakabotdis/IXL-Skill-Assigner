@@ -222,7 +222,7 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
                 >
                   Clear All
                 </button>
-                {selectedCount > 1 && (
+                {(selectedGroupNames.length + individualStudents.length) > 1 && (
                   <button
                     type="button"
                     onClick={() => setIsCreatingGroup(!isCreatingGroup)}
@@ -232,6 +232,17 @@ export default function StudentSelector({ students, groups, selectedStudentIds, 
                     Save as Group
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(false);
+                  }}
+                  className="flex-1 min-w-[80px] py-1.5 text-xs font-semibold rounded-lg bg-ixl-turquoise text-white hover:opacity-90 transition-opacity"
+                  style={{ background: 'var(--ixl-turquoise)' }}
+                >
+                  Done
+                </button>
               </div>
 
               {isCreatingGroup && (
