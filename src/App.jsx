@@ -379,8 +379,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (!window.confirm('Are you sure you want to sign out? This will close any automated browser windows.')) return;
-
     try {
       showNotification('info', 'Signing out...');
       const result = await api.logout();
