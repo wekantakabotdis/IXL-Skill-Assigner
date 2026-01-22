@@ -20,11 +20,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install chromium
+      - name: Install Playwright browsers to expected location
+        run: |
+          npx playwright install chromium
+          mkdir -p node_modules/playwright/.local-browsers
+          cp -r ~/Library/Caches/ms-playwright/* node_modules/playwright/.local-browsers/ || true
 
-      - name: Build and package (Intel + ARM)
-        run: npm run build && npx electron-builder --mac --x64 --arm64
+      - name: Build frontend
+        run: npm run build
+
+      - name: Package for Intel
+        run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package for ARM
+        run: npx electron-builder --mac --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,8 +59,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install chromium
+      - name: Install Playwright browsers to expected location
+        shell: pwsh
+        run: |
+          npx playwright install chromium
+          New-Item -ItemType Directory -Force -Path "node_modules/playwright/.local-browsers"
+          $playwrightCache = "$env:LOCALAPPDATA\ms-playwright"
+          if (Test-Path $playwrightCache) {
+            Copy-Item -Path "$playwrightCache\*" -Destination "node_modules/playwright/.local-browsers\" -Recurse -Force
+          }
 
       - name: Build and package (Windows)
         run: npm run build && npx electron-builder --win
