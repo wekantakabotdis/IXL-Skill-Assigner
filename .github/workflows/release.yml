@@ -6,8 +6,8 @@ on:
       - 'v*'
 
 jobs:
-  build-mac-intel:
-    runs-on: macos-13
+  build-mac:
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -23,43 +23,15 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium
 
-      - name: Build and package (Intel)
-        run: npm run build && npx electron-builder --mac --x64
+      - name: Build and package (Intel + ARM)
+        run: npm run build && npx electron-builder --mac --x64 --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Intel DMG
+      - name: Upload Mac DMGs
         uses: actions/upload-artifact@v4
         with:
-          name: mac-intel-dmg
-          path: release/*.dmg
-
-  build-mac-arm:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install chromium
-
-      - name: Build and package (ARM)
-        run: npm run build && npx electron-builder --mac --arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload ARM DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-arm-dmg
+          name: mac-dmg
           path: release/*.dmg
 
   build-windows:
@@ -91,7 +63,7 @@ jobs:
           path: release/*.exe
 
   create-release:
-    needs: [build-mac-intel, build-mac-arm, build-windows]
+    needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -108,8 +80,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/mac-intel-dmg/*.dmg
-            artifacts/mac-arm-dmg/*.dmg
+            artifacts/mac-dmg/*.dmg
             artifacts/windows-exe/*.exe
           generate_release_notes: true
         env:
