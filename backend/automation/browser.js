@@ -40,8 +40,16 @@ class IXLBrowser {
     return this.page;
   }
 
-  async login(username, password, headless = false) {
+  async login(username, password, headless = false, organization = '') {
     try {
+      // Sanitize organization to prevent URL injection
+      const sanitizedOrg = organization ? organization.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 50) : '';
+      const loginUrl = sanitizedOrg
+        ? `https://www.ixl.com/signin/${sanitizedOrg}`
+        : 'https://www.ixl.com/signin';
+
+      console.log(`Using login URL: ${loginUrl}`);
+
       // Always close any existing browser process before a fresh login attempt
       // to ensure a clean state and prevent "stuck" situations.
       console.log('Ensuring clean state for fresh login...');
@@ -52,14 +60,14 @@ class IXLBrowser {
       console.log('Opening IXL login page...');
 
       try {
-        await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
+        await this.page.goto(loginUrl, {
           waitUntil: 'domcontentloaded'
         });
       } catch (navigationError) {
         console.log('Navigation failed, trying once more...', navigationError.message);
         await this.close();
         await this.launch(headless);
-        await this.page.goto('https://www.ixl.com/signin/vsafuture/form', {
+        await this.page.goto(loginUrl, {
           waitUntil: 'domcontentloaded'
         });
       }
@@ -162,7 +170,7 @@ class IXLBrowser {
       this.isLoggedIn = currentUrl.includes('ixl.com') && !currentUrl.includes('signin');
 
       console.log('Login successful:', this.isLoggedIn);
-      return this.isLoggedIn;
+      return { success: this.isLoggedIn };
     } catch (error) {
       console.error('Login error:', error.message);
       // If the target was closed by user, ensure we clean up and return false promptly
@@ -170,7 +178,16 @@ class IXLBrowser {
         console.log('Browser window was closed by user.');
       }
       await this.close();
-      return false;
+
+      // Determine if this is a credentials error
+      const isAuthError = error.message.includes('Invalid username or password') ||
+                          error.message.includes('Login failed');
+
+      return {
+        success: false,
+        error: error.message,
+        isAuthError
+      };
     }
   }
 

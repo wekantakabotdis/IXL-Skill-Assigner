@@ -19,14 +19,17 @@ let isProcessingQueue = false;
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, password, headless, saveAccount } = req.body;
-    console.log('Login API called', { username, headless, saveAccount });
+    const { username, password, headless, saveAccount, organization } = req.body;
+    console.log('Login API called', { username, headless, saveAccount, organization });
 
-    const success = await browser.login(username, password, headless);
+    // Fallback chain: request body → saved setting → empty string (generic IXL login)
+    const org = organization !== undefined ? organization : (db.getSetting('ixl_organization') || '');
 
-    console.log('Browser login returned:', success);
+    const result = await browser.login(username, password, headless, org);
 
-    if (success) {
+    console.log('Browser login returned:', result);
+
+    if (result.success) {
       db.switchUser(username);
       const cookies = await browser.saveCookies();
 
@@ -62,7 +65,7 @@ app.post('/api/auth/login', async (req, res) => {
       console.log('Sending failure response to frontend');
       res.status(401).json({
         success: false,
-        error: 'Login failed. Please check your credentials.'
+        error: result.error || 'Login failed. Please check your credentials.'
       });
     }
   } catch (error) {

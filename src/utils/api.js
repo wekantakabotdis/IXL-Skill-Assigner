@@ -12,11 +12,11 @@ const BASE_URL = `http://localhost:${apiPort}/api`;
 const getUrl = (path) => `${BASE_URL}${path}`;
 
 export const api = {
-  async login(username, password, headless = false, saveAccount = false) {
+  async login(username, password, headless = false, saveAccount = false, organization = '') {
     const response = await fetch(getUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, headless, saveAccount })
+      body: JSON.stringify({ username, password, headless, saveAccount, organization })
     });
     return response.json();
   },

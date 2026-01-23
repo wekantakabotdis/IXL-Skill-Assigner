@@ -88,6 +88,8 @@ export default function App() {
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [organization, setOrganization] = useState('');
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const [students, setStudents] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -251,6 +253,11 @@ export default function App() {
         if (value !== null) {
           setShowBrowser(value !== 'true');
         }
+
+        const { value: orgValue } = await api.getSetting('ixl_organization');
+        if (orgValue) {
+          setOrganization(orgValue);
+        }
       } catch (error) {
         console.error('Error fetching settings:', error);
       }
@@ -347,10 +354,10 @@ export default function App() {
     setIsLoggingIn(true);
 
     try {
-      console.log('Starting login process...', { username, showBrowser, saveAccount });
+      console.log('Starting login process...', { username, showBrowser, saveAccount, organization });
       showNotification('info', !showBrowser ? 'Logging in (headless mode)...' : 'Opening browser...');
 
-      const result = await api.login(username, password, !showBrowser, saveAccount);
+      const result = await api.login(username, password, !showBrowser, saveAccount, organization);
       console.log('Login result received:', result);
 
       if (result.success) {
@@ -784,6 +791,56 @@ export default function App() {
                   </p>
                 </div>
               )}
+
+              {/* Advanced Settings Section */}
+              <div className="border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                  className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-turquoise-500 transition-colors w-full"
+                >
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showAdvancedSettings ? 'rotate-90' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced Settings
+                </button>
+
+                {showAdvancedSettings && (
+                  <div className="mt-4 p-4 rounded-lg bg-gray-50 border border-gray-100 space-y-3 animate-fadeIn">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1 text-gray-600">
+                        School/Organization ID
+                      </label>
+                      <input
+                        type="text"
+                        value={organization}
+                        onChange={(e) => {
+                          const sanitized = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 50);
+                          setOrganization(sanitized);
+                          api.saveSetting('ixl_organization', sanitized);
+                        }}
+                        className="input-field w-full px-3 py-2 rounded-lg text-sm"
+                        placeholder="Leave blank for generic login"
+                      />
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        The identifier from your school's IXL login URL (optional)
+                      </p>
+                      <div className="text-[10px] text-gray-400 mt-2 font-mono bg-white px-2 py-1 rounded border border-gray-200">
+                        {organization ? (
+                          <>ixl.com/signin/<span className="text-turquoise-600 font-semibold">{organization}</span></>
+                        ) : (
+                          <>ixl.com/signin</>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="submit"
