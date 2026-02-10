@@ -225,14 +225,12 @@ class DB {
 
   updateStudents(students) {
     this.ensureUserDb();
+    const deleteStmt = this.userDb.prepare('DELETE FROM students');
     const stmt = this.userDb.prepare(
-      `INSERT INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))
-       ON CONFLICT(ixl_id) DO UPDATE SET
-         name=excluded.name,
-         class_name=excluded.class_name,
-         last_synced=excluded.last_synced`
+      `INSERT INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))`
     );
     const transaction = this.userDb.transaction((students) => {
+      deleteStmt.run();
       for (const student of students) {
         // Join classNames array into comma-separated string for display
         const classNameStr = (student.classNames || []).join(', ');
