@@ -16,9 +16,9 @@ async function scrapeStudents(page) {
 
     console.log('Extracting student data from roster table...');
     const result = await page.evaluate(() => {
-      const students = [];
+      const studentsMap = new Map(); // Map<uniqueId, studentObject>
       const classesSet = new Set();
-      const seenStudents = new Set();
+      const debugInfo = [];
 
       // Check if Class column exists by looking at headers
       const headers = document.querySelectorAll('thead th');
@@ -83,54 +83,114 @@ async function scrapeStudents(page) {
 
         const fullName = `${firstName} ${lastName}`.trim();
 
-        // Extract class name if applicable
-        let className = null;
+        // Extract class names (can be multiple, comma-separated)
+        let classNames = [];
         if (hasClasses && classColIndex >= 0 && cells[classColIndex]) {
-          // The class cell may have a link inside, extract from that
-          const classLink = cells[classColIndex].querySelector('a');
-          if (classLink) {
-            className = classLink.textContent?.trim() || null;
-          } else {
-            // Otherwise get inner text but handle potential duplicates
-            const rawText = cells[classColIndex].textContent?.trim() || '';
-            // If the text appears to be duplicated (like "F-W-TuesF-W-Tues"), take first half
-            if (rawText.length % 2 === 0) {
-              const halfLen = rawText.length / 2;
-              const firstHalf = rawText.substring(0, halfLen);
-              const secondHalf = rawText.substring(halfLen);
-              if (firstHalf === secondHalf) {
-                className = firstHalf;
-              } else {
-                className = rawText;
-              }
-            } else {
-              className = rawText;
+          const classCell = cells[classColIndex];
+
+          // Get all the inner HTML for debugging
+          const cellHTML = classCell.innerHTML || '';
+          const cellText = classCell.textContent?.trim() || '';
+
+          // Strategy 1: Look for class-title-text div with primary-class spans
+          // This avoids the tooltip which duplicates class names without separators
+          const classTitleDiv = classCell.querySelector('.class-title-text');
+
+          const debug = {
+            name: fullName,
+            cellText: cellText,
+            method: null
+          };
+
+          if (classTitleDiv) {
+            // Extract from primary-class spans within class-title-text
+            const primaryClassSpans = classTitleDiv.querySelectorAll('span.primary-class');
+            if (primaryClassSpans.length > 0) {
+              classNames = Array.from(primaryClassSpans)
+                .map(span => span.textContent?.trim())
+                .filter(Boolean);
+              debug.method = 'primary-class spans';
             }
           }
-          if (className) {
-            classesSet.add(className);
+
+          // Strategy 2: Try extracting from link elements
+          if (classNames.length === 0) {
+            const classLinks = classCell.querySelectorAll('a');
+            if (classLinks.length > 0) {
+              classNames = Array.from(classLinks)
+                .map(link => link.textContent?.trim())
+                .filter(Boolean);
+              debug.method = 'links';
+            }
           }
+
+          // Strategy 3: Fallback to text content with comma splitting
+          if (classNames.length === 0) {
+            debug.method = 'textContent fallback';
+            let cleanText = cellText;
+
+            // Handle duplicates
+            if (cellText.length % 2 === 0 && cellText.length > 0) {
+              const halfLen = cellText.length / 2;
+              const firstHalf = cellText.substring(0, halfLen);
+              const secondHalf = cellText.substring(halfLen);
+              if (firstHalf === secondHalf) {
+                cleanText = firstHalf;
+              }
+            }
+
+            // Split on commas
+            if (cleanText.includes(',')) {
+              classNames = cleanText.split(',')
+                .map(c => c.trim())
+                .filter(Boolean);
+            } else if (cleanText) {
+              classNames = [cleanText];
+            }
+          }
+
+          debug.extractedClasses = classNames;
+          debugInfo.push(debug);
+
+          // Add all found classes to the set
+          classNames.forEach(cn => classesSet.add(cn));
         }
 
         // Use studentId as unique identifier, or generate from name
         const uniqueId = studentId || fullName.replace(/\s+/g, '_');
 
-        // Deduplicate using the uniqueId (studentId) NOT fullName
-        // This prevents duplicate entries when the same student appears in multiple rows
-        if (fullName && uniqueId && !seenStudents.has(uniqueId)) {
-          seenStudents.add(uniqueId);
-          students.push({
-            ixlId: uniqueId,
-            name: fullName,
-            className: className || 'Default Class'
-          });
+        // Track all classes for each student
+        if (fullName && uniqueId) {
+          // Use Default Class if no classes were found
+          const rowClasses = classNames.length > 0 ? classNames : ['Default Class'];
+
+          if (studentsMap.has(uniqueId)) {
+            // Student already seen - append any new classes to their classNames array
+            const existingStudent = studentsMap.get(uniqueId);
+            rowClasses.forEach(newClass => {
+              if (!existingStudent.classNames.includes(newClass)) {
+                existingStudent.classNames.push(newClass);
+              }
+            });
+          } else {
+            // First time seeing this student - create new entry with classNames array
+            studentsMap.set(uniqueId, {
+              ixlId: uniqueId,
+              name: fullName,
+              classNames: rowClasses
+            });
+          }
         }
       });
+
+      // Convert map to array for return
+      const students = Array.from(studentsMap.values());
 
       return {
         hasClasses,
         students,
-        classes: Array.from(classesSet).sort()
+        classes: Array.from(classesSet).sort(),
+        debugInfo
       };
     });
 
@@ -138,8 +198,25 @@ async function scrapeStudents(page) {
     console.log('Has classes:', result.hasClasses);
     if (result.hasClasses) {
       console.log('Found classes:', result.classes);
+      console.log('Students with multiple classes:',
+        result.students
+          .filter(s => s.classNames && s.classNames.length > 1)
+          .map(s => `${s.name} (${s.classNames.join(', ')})`)
+      );
     }
     console.log('Student names:', result.students.map(s => s.name));
+
+    // Log debug info for first 3 students
+    if (result.debugInfo && result.debugInfo.length > 0) {
+      console.log('\n=== DEBUG: Cell extraction details (first 5 students) ===');
+      result.debugInfo.slice(0, 5).forEach(d => {
+        console.log(`\nStudent: ${d.name}`);
+        console.log(`  Extraction method: ${d.method}`);
+        console.log(`  Cell text: "${d.cellText}"`);
+        console.log(`  Extracted classes:`, d.extractedClasses);
+      });
+      console.log('==================\n');
+    }
 
     return result;
   } catch (error) {

@@ -205,13 +205,15 @@ app.post('/api/sync/students', async (req, res) => {
         });
 
         // Match students by name to get their DB IDs
+        // Iterate over each student's classNames array to add them to all their classes
         result.students.forEach(scrapedStudent => {
           const dbStudent = dbStudents.find(s => s.name === scrapedStudent.name);
-          if (dbStudent && scrapedStudent.className && scrapedStudent.className !== 'Default Class') {
-            if (!studentsByClass[scrapedStudent.className]) {
-              studentsByClass[scrapedStudent.className] = [];
-            }
-            studentsByClass[scrapedStudent.className].push(dbStudent.id);
+          if (dbStudent && scrapedStudent.classNames) {
+            scrapedStudent.classNames.forEach(className => {
+              if (className !== 'Default Class' && studentsByClass[className]) {
+                studentsByClass[className].push(dbStudent.id);
+              }
+            });
           }
         });
 

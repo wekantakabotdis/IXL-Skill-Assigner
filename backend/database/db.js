@@ -234,7 +234,9 @@ class DB {
     );
     const transaction = this.userDb.transaction((students) => {
       for (const student of students) {
-        stmt.run(student.ixlId, student.name, student.className);
+        // Join classNames array into comma-separated string for display
+        const classNameStr = (student.classNames || []).join(', ');
+        stmt.run(student.ixlId, student.name, classNameStr);
       }
     });
     transaction(students);
