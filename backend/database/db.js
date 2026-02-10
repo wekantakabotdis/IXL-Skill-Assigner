@@ -368,10 +368,28 @@ class DB {
 
   deleteSkillsByGrade(gradeLevel, subject) {
     this.ensureUserDb();
-    const stmt = this.userDb.prepare(
-      'DELETE FROM skills WHERE grade_level = ? AND subject = ?'
-    );
-    return stmt.run(gradeLevel, subject);
+
+    const transaction = this.userDb.transaction(() => {
+      // First, get the IDs of skills we're about to delete
+      const skillIds = this.userDb.prepare(
+        'SELECT id FROM skills WHERE grade_level = ? AND subject = ?'
+      ).all(gradeLevel, subject).map(row => row.id);
+
+      if (skillIds.length > 0) {
+        // Delete related assignment_history entries to avoid FK constraint
+        const placeholders = skillIds.map(() => '?').join(',');
+        this.userDb.prepare(
+          `DELETE FROM assignment_history WHERE skill_id IN (${placeholders})`
+        ).run(...skillIds);
+      }
+
+      // Now delete the skills
+      return this.userDb.prepare(
+        'DELETE FROM skills WHERE grade_level = ? AND subject = ?'
+      ).run(gradeLevel, subject);
+    });
+
+    return transaction();
   }
 
   getSkillsByIds(ids) {
@@ -400,7 +418,7 @@ class DB {
   updateSkills(skills) {
     this.ensureUserDb();
     const stmt = this.userDb.prepare(
-      'INSERT OR REPLACE INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order, subject) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order, subject) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const transaction = this.userDb.transaction((skills) => {
       for (const skill of skills) {

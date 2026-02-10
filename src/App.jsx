@@ -307,7 +307,8 @@ export default function App() {
           setSkills(updatedSkills);
           showNotification('success', `Loaded ${updatedSkills.length} ${getSubjectDisplayName(subj)} skills!`);
         } else {
-          showNotification('error', `No skills found for Grade ${grade}. Check browser console for details.`);
+          const errorMsg = syncResult.error || `No skills found for Grade ${grade}. Check browser console for details.`;
+          showNotification('error', errorMsg);
           setSkills([]);
         }
       } else {

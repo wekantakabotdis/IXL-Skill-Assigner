@@ -328,8 +328,13 @@ app.post('/api/sync/skills', async (req, res) => {
     }
 
     if (skills.length > 0) {
-      db.deleteSkillsByGrade(gradeLevel, subject);
+      console.log(`Deleting existing skills for grade ${gradeLevel}, subject ${subject}...`);
+      const deleteResult = db.deleteSkillsByGrade(gradeLevel, subject);
+      console.log(`Deleted ${deleteResult.changes} existing skills`);
+
+      console.log(`Inserting ${skills.length} new skills...`);
       db.updateSkills(skills);
+      console.log('Skills saved to database');
     }
 
     // Return the updated list of skills from the database (with IDs)
@@ -341,6 +346,7 @@ app.post('/api/sync/skills', async (req, res) => {
       skills: updatedSkills
     });
   } catch (error) {
+    console.error('Error syncing skills:', error);
     res.status(500).json({
       success: false,
       error: error.message
