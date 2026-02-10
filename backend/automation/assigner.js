@@ -16,19 +16,30 @@ async function selectClassInDropdown(page, className, action = 'suggest') {
   }).first();
 
   if (await classRow.isVisible()) {
-    console.log(`Found class "${className}", clicking star...`);
+    console.log(`Found class "${className}", checking star state...`);
     const starInRow = classRow.locator('.suggestion-toggle-icon').first();
 
     if (await starInRow.count() && await starInRow.isVisible()) {
-      const isCurrentlySelected = await checkStarState(starInRow);
-      const shouldClick = (action === 'suggest' && !isCurrentlySelected) || (action === 'stop_suggesting' && isCurrentlySelected);
+      const state = await getStarState(starInRow);
+      console.log(`Star state for class "${className}": ${state}`);
 
-      if (shouldClick) {
-        console.log(`Clicking star for class "${className}" to ${action}...`);
+      if (action === 'suggest' && state === 'suggested') {
+        console.log(`Class "${className}" already fully suggested — skipping`);
+      } else if (action === 'stop_suggesting' && state === 'not-suggested') {
+        console.log(`Class "${className}" already not suggested — skipping`);
+      } else if (action === 'stop_suggesting' && state === 'half-suggested') {
+        // partial→full (click 1), then full→empty (click 2)
+        console.log(`Class "${className}" is partially suggested — clicking twice to unsuggest...`);
+        await starInRow.click();
+        await page.waitForTimeout(300);
         await starInRow.click();
         await page.waitForTimeout(300);
       } else {
-        console.log(`Star for class "${className}" already in desired state`);
+        // suggest (empty/partial → full): 1 click
+        // stop_suggesting (full → empty): 1 click
+        console.log(`Clicking star for class "${className}" to ${action}...`);
+        await starInRow.click();
+        await page.waitForTimeout(300);
       }
       return [{ studentName: className, success: true, isClass: true }];
     }
@@ -39,16 +50,13 @@ async function selectClassInDropdown(page, className, action = 'suggest') {
 }
 
 /**
- * Check if a star icon is currently selected/active
+ * Get the star state: 'suggested', 'half-suggested', or 'not-suggested'
  */
-async function checkStarState(starElement) {
+async function getStarState(starElement) {
   return await starElement.evaluate(el => {
-    const hasSelectedClass = el.classList.contains('selected') || el.classList.contains('active') || el.classList.contains('on') || el.classList.contains('suggested');
-    const hasAriaPressed = el.getAttribute('aria-pressed') === 'true';
-    const parentSelected = el.closest('.entry-row')?.classList.contains('suggested') || el.closest('.entry-row')?.classList.contains('selected');
-    const isFilled = el.querySelector('.filled, .active, .on') !== null || el.classList.contains('filled');
-    const dataSelected = el.getAttribute('data-selected') === 'true' || el.getAttribute('data-suggested') === 'true';
-    return hasSelectedClass || hasAriaPressed || parentSelected || isFilled || dataSelected;
+    if (el.classList.contains('suggested')) return 'suggested';
+    if (el.classList.contains('half-suggested')) return 'half-suggested';
+    return 'not-suggested';
   });
 }
 
@@ -105,15 +113,23 @@ async function selectStudentsInDropdown(page, studentNames, action = 'suggest', 
         const starInRow = studentRow.locator('.suggestion-toggle-icon').first();
 
         if (await starInRow.count() && await starInRow.isVisible()) {
-          const isCurrentlySelected = await checkStarState(starInRow);
-          const shouldClick = (action === 'suggest' && !isCurrentlySelected) || (action === 'stop_suggesting' && isCurrentlySelected);
+          const state = await getStarState(starInRow);
+          console.log(`Star state for "${name}": ${state}`);
 
-          if (shouldClick) {
-            console.log(`Clicking star for "${name}" to ${action}...`);
+          if (action === 'suggest' && state === 'suggested') {
+            console.log(`"${name}" already suggested — skipping`);
+          } else if (action === 'stop_suggesting' && state === 'not-suggested') {
+            console.log(`"${name}" already not suggested — skipping`);
+          } else if (action === 'stop_suggesting' && state === 'half-suggested') {
+            console.log(`"${name}" is partially suggested — clicking twice to unsuggest...`);
+            await starInRow.click();
+            await page.waitForTimeout(200);
             await starInRow.click();
             await page.waitForTimeout(200);
           } else {
-            console.log(`Star for "${name}" already in desired state (${action})`);
+            console.log(`Clicking star for "${name}" to ${action}...`);
+            await starInRow.click();
+            await page.waitForTimeout(200);
           }
           results.push({ studentName: name, success: true });
         } else {
@@ -240,6 +256,25 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
     await skillNode.scrollIntoViewIfNeeded();
     const icon = await getSuggestionIcon(skillNode);
     if (!await icon.count()) throw new Error(`Icon not found for ${skillCode}`);
+
+    // Pre-check: skip if the main skill star is already in the desired state
+    const mainStarState = await getStarState(icon);
+    console.log(`Main star state for ${skillCode}: ${mainStarState}`);
+
+    if (action === 'suggest' && mainStarState === 'suggested') {
+      console.log(`Skill ${skillCode} already fully suggested — skipping entirely`);
+      const skipResults = [];
+      if (targets.classes) targets.classes.forEach(c => skipResults.push({ studentName: c, isClass: true, skillCode, success: true, skipped: true }));
+      if (targets.students) targets.students.forEach(s => skipResults.push({ studentName: s, skillCode, success: true, skipped: true }));
+      return skipResults;
+    }
+    if (action === 'stop_suggesting' && mainStarState === 'not-suggested') {
+      console.log(`Skill ${skillCode} already not suggested — skipping entirely`);
+      const skipResults = [];
+      if (targets.classes) targets.classes.forEach(c => skipResults.push({ studentName: c, isClass: true, skillCode, success: true, skipped: true }));
+      if (targets.students) targets.students.forEach(s => skipResults.push({ studentName: s, skillCode, success: true, skipped: true }));
+      return skipResults;
+    }
 
     await icon.hover();
     const visible = await checkDropdownVisible(page);
