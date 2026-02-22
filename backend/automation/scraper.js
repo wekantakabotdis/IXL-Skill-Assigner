@@ -426,34 +426,39 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
       console.log('Found sections:', sections.length);
 
       sections.forEach((section) => {
-        // Get the section ID (e.g., "section-A")
+        // Get the section ID (e.g., "section-A", "section-Reading", "section-Physical Science")
         const sectionId = section.id || '';
-        const sectionMatch = sectionId.match(/section-([A-Z])/);
-        const sectionLetter = sectionMatch ? sectionMatch[1] : null;
+        const sectionMatch = sectionId.match(/^section-(.+)$/);
+        let sectionName = sectionMatch ? sectionMatch[1] : null;
 
-        if (!sectionLetter) {
+        if (!sectionName) {
           // Try to get from section description
           const descEl = section.querySelector('.skill-plan-section-description, .skill-plan-section-name, .skill-plan-section-header');
           const descText = descEl?.textContent?.trim() || '';
 
           const match = descText.match(/Sub-Claim\s+([A-Z])/);
           if (match) {
-            section._letter = match[1];
-          } else if (descText.toLowerCase().includes('reading')) {
-            section._letter = 'R';
-          } else if (descText.toLowerCase().includes('writing')) {
-            section._letter = 'W';
+            sectionName = match[1];
           } else {
-            console.log('Could not determine section letter for:', descText);
-            return;
+            // Try extracting the first meaningful word from description
+            const wordMatch = descText.match(/([A-Za-z][A-Za-z\s]*[A-Za-z])/);
+            if (wordMatch) {
+              sectionName = wordMatch[1].trim();
+            } else {
+              console.log('Could not determine section name for:', descText);
+              return;
+            }
           }
         }
 
-        const letter = sectionLetter || section._letter;
-        if (!letter) return;
+        if (!sectionName) return;
 
         // Initialize counter for this section
         let skillCounter = 1;
+
+        // Track seen data-skill IDs to deduplicate responsive design duplicates
+        // (each skill appears twice in the DOM — visible + hidden)
+        const seenDataSkills = new Set();
 
         // Find all skill rows in this section
         const rows = section.querySelectorAll('tbody tr');
@@ -463,20 +468,24 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
           const skillLinks = row.querySelectorAll('a.skill-tree-skill-link');
 
           skillLinks.forEach((link) => {
+            const dataSkillId = link.getAttribute('data-skill') || '';
+
+            // Skip duplicate links (responsive design renders each skill twice)
+            if (dataSkillId && seenDataSkills.has(dataSkillId)) return;
+            if (dataSkillId) seenDataSkills.add(dataSkillId);
+
             const skillName = link.textContent?.trim() || '';
             const skillUrl = link.href || '';
 
-            // Extract data-skill ID if available
-            const dataSkillId = link.getAttribute('data-skill') || `njsla-${letter}-${skillCounter}`;
-
-            const skillCode = `${letter}.${skillCounter}`;
+            const finalId = dataSkillId || `njsla-${sectionName}-${skillCounter}`;
+            const skillCode = `${sectionName}.${skillCounter}`;
 
             results.push({
-              ixlId: dataSkillId,
+              ixlId: finalId,
               skillCode: skillCode,
               name: skillName, // Just the name, no code prefix
               skillName: skillName,
-              category: letter,
+              category: sectionName,
               gradeLevel: grade,
               url: skillUrl,
               displayOrder: skillCounter,
@@ -494,19 +503,26 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
 
         // Try looking for skill links directly
         const allLinks = document.querySelectorAll('a.skill-tree-skill-link');
+        const seenFallback = new Set();
         let currentSection = 'A';
         let skillNum = 1;
 
         allLinks.forEach((link) => {
+          const dataSkillId = link.getAttribute('data-skill') || '';
+
+          // Skip duplicate links (responsive design renders each skill twice)
+          if (dataSkillId && seenFallback.has(dataSkillId)) return;
+          if (dataSkillId) seenFallback.add(dataSkillId);
+
           const skillName = link.textContent?.trim() || '';
           const skillUrl = link.href || '';
-          const dataSkillId = link.getAttribute('data-skill') || `njsla-${currentSection}-${skillNum}`;
+          const finalId = dataSkillId || `njsla-${currentSection}-${skillNum}`;
 
           // Check if we're in a new section by looking at parent elements
           const sectionEl = link.closest('.skill-plan-section');
           if (sectionEl) {
             const sectionId = sectionEl.id || '';
-            const match = sectionId.match(/section-([A-Z])/);
+            const match = sectionId.match(/^section-(.+)$/);
             if (match && match[1] !== currentSection) {
               currentSection = match[1];
               skillNum = 1;
@@ -516,7 +532,7 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
           const skillCode = `${currentSection}.${skillNum}`;
 
           results.push({
-            ixlId: dataSkillId,
+            ixlId: finalId,
             skillCode: skillCode,
             name: `${skillCode} ${skillName}`,
             skillName: skillName,

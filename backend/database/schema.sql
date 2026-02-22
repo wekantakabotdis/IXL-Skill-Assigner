@@ -11,13 +11,15 @@ CREATE TABLE IF NOT EXISTS students (
 -- Skills table
 CREATE TABLE IF NOT EXISTS skills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ixl_id TEXT UNIQUE NOT NULL,
+  ixl_id TEXT NOT NULL,
   skill_code TEXT,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   grade_level TEXT NOT NULL,
   url TEXT NOT NULL,
-  display_order INTEGER
+  display_order INTEGER,
+  subject TEXT DEFAULT 'math',
+  UNIQUE(ixl_id, subject)
 );
 
 -- Assignment history table

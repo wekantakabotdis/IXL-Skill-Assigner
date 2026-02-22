@@ -88,14 +88,15 @@ class DB {
       );
       CREATE TABLE IF NOT EXISTS skills (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ixl_id TEXT UNIQUE NOT NULL,
+        ixl_id TEXT NOT NULL,
         skill_code TEXT,
         name TEXT NOT NULL,
         category TEXT NOT NULL,
         grade_level TEXT NOT NULL,
         url TEXT NOT NULL,
         display_order INTEGER,
-        subject TEXT DEFAULT 'math'
+        subject TEXT DEFAULT 'math',
+        UNIQUE(ixl_id, subject)
       );
       CREATE TABLE IF NOT EXISTS assignment_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,6 +141,44 @@ class DB {
     try {
       this.userDb.exec('ALTER TABLE assignment_history ADD COLUMN group_name TEXT');
     } catch (e) { }
+
+    // Migration: change skills unique constraint from UNIQUE(ixl_id) to UNIQUE(ixl_id, subject)
+    // This allows the same IXL skill to appear under different subjects (e.g., math and njsla-math)
+    try {
+      const tableInfo = this.userDb.pragma('index_list(skills)');
+      const hasOldUnique = tableInfo.some(idx => {
+        if (!idx.unique) return false;
+        const cols = this.userDb.pragma(`index_info(${idx.name})`);
+        return cols.length === 1 && cols[0].name === 'ixl_id';
+      });
+
+      if (hasOldUnique) {
+        console.log('Migrating skills table: UNIQUE(ixl_id) -> UNIQUE(ixl_id, subject)...');
+        this.userDb.exec(`
+          CREATE TABLE IF NOT EXISTS skills_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ixl_id TEXT NOT NULL,
+            skill_code TEXT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            grade_level TEXT NOT NULL,
+            url TEXT NOT NULL,
+            display_order INTEGER,
+            subject TEXT DEFAULT 'math',
+            UNIQUE(ixl_id, subject)
+          );
+          INSERT OR IGNORE INTO skills_new (id, ixl_id, skill_code, name, category, grade_level, url, display_order, subject)
+            SELECT id, ixl_id, skill_code, name, category, grade_level, url, display_order, subject FROM skills;
+          DROP TABLE skills;
+          ALTER TABLE skills_new RENAME TO skills;
+          CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category);
+          CREATE INDEX IF NOT EXISTS idx_skills_grade ON skills(grade_level);
+        `);
+        console.log('Skills table migration complete.');
+      }
+    } catch (e) {
+      console.error('Skills table migration error:', e.message);
+    }
   }
 
   switchUser(username) {
