@@ -264,16 +264,44 @@ class DB {
 
   updateStudents(students) {
     this.ensureUserDb();
-    const deleteStmt = this.userDb.prepare('DELETE FROM students');
-    const stmt = this.userDb.prepare(
-      `INSERT INTO students (ixl_id, name, class_name, last_synced) VALUES (?, ?, ?, datetime('now'))`
+
+    const upsertStmt = this.userDb.prepare(
+      `INSERT INTO students (ixl_id, name, class_name, last_synced)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(ixl_id) DO UPDATE SET
+         name = excluded.name,
+         class_name = excluded.class_name,
+         last_synced = datetime('now')`
     );
+
     const transaction = this.userDb.transaction((students) => {
-      deleteStmt.run();
+      // Collect the ixl_ids of all incoming students
+      const incomingIxlIds = new Set(students.map(s => s.ixlId));
+
+      // Find students in DB that are no longer in the roster
+      const existingStudents = this.userDb.prepare('SELECT id, ixl_id FROM students').all();
+      const removedStudentIds = existingStudents
+        .filter(s => !incomingIxlIds.has(s.ixl_id))
+        .map(s => s.id);
+
+      // Clean up foreign key references for removed students
+      if (removedStudentIds.length > 0) {
+        const placeholders = removedStudentIds.map(() => '?').join(',');
+        this.userDb.prepare(
+          `DELETE FROM assignment_history WHERE student_id IN (${placeholders})`
+        ).run(...removedStudentIds);
+        this.userDb.prepare(
+          `DELETE FROM group_members WHERE student_id IN (${placeholders})`
+        ).run(...removedStudentIds);
+        this.userDb.prepare(
+          `DELETE FROM students WHERE id IN (${placeholders})`
+        ).run(...removedStudentIds);
+      }
+
+      // Upsert all incoming students
       for (const student of students) {
-        // Join classNames array into comma-separated string for display
         const classNameStr = (student.classNames || []).join(', ');
-        stmt.run(student.ixlId, student.name, classNameStr);
+        upsertStmt.run(student.ixlId, student.name, classNameStr);
       }
     });
     transaction(students);
