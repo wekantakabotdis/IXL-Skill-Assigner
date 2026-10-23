@@ -1,6 +1,12 @@
 name: Release Build
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
@@ -10,6 +16,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -19,12 +27,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Playwright browsers to expected location
-        run: |
-          npx playwright install chromium
-          mkdir -p node_modules/playwright/.local-browsers
-          cp -r ~/Library/Caches/ms-playwright/* node_modules/playwright/.local-browsers/ || true
 
       - name: Build frontend
         run: npm run build
@@ -42,9 +44,18 @@ jobs:
           path: release/*.dmg
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    env:
+      npm_config_msvs_version: '2022'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+
+      - name: Setup Python for native builds
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,16 +65,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Playwright browsers to expected location
-        shell: pwsh
-        run: |
-          npx playwright install chromium
-          New-Item -ItemType Directory -Force -Path "node_modules/playwright/.local-browsers"
-          $playwrightCache = "$env:LOCALAPPDATA\ms-playwright"
-          if (Test-Path $playwrightCache) {
-            Copy-Item -Path "$playwrightCache\*" -Destination "node_modules/playwright/.local-browsers\" -Recurse -Force
-          }
 
       - name: Build and package (Windows)
         run: npm run build && npx electron-builder --win --publish never
@@ -91,6 +92,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           files: |
             artifacts/mac-dmg/*.dmg
             artifacts/windows-exe/*.exe
