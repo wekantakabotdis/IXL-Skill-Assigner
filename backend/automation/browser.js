@@ -8,6 +8,7 @@ class IXLBrowser {
     this.context = null;
     this.page = null;
     this.isLoggedIn = false;
+    this.operationPages = new Set();
   }
 
   async launch(headless = false) {
@@ -221,11 +222,31 @@ class IXLBrowser {
       this.context = null;
       this.page = null;
       this.isLoggedIn = false;
+      this.operationPages.clear();
     }
   }
 
   getPage() {
     return this.page;
+  }
+
+  async withPage(operation) {
+    const context = this.context;
+    if (!this.isLoggedIn || !context) throw new Error('Not authenticated');
+    const page = await context.newPage();
+    this.operationPages.add(page);
+    page.setDefaultTimeout(15000);
+    try {
+      return await operation(page);
+    } finally {
+      this.operationPages.delete(page);
+      await page.close().catch(() => {});
+    }
+  }
+
+  async closeOperationPages() {
+    await Promise.allSettled([...this.operationPages].map(page => page.close()));
+    this.operationPages.clear();
   }
 
   isAuthenticated() {

@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { validateSkill } = require('../automation/skillIdentity');
 
 class DB {
   constructor() {
@@ -34,6 +35,9 @@ class DB {
       this.userDataPath = __dirname;
       this.schemaPath = path.join(__dirname, 'schema.sql');
     }
+
+    if (process.env.IXL_DATA_DIR) this.userDataPath = process.env.IXL_DATA_DIR;
+    fs.mkdirSync(this.userDataPath, { recursive: true });
 
     const sharedDbPath = path.join(this.userDataPath, 'ixl-shared.db');
 
@@ -179,6 +183,7 @@ class DB {
     } catch (e) {
       console.error('Skills table migration error:', e.message);
     }
+    try { this.userDb.exec('ALTER TABLE skills ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1'); } catch (e) {}
   }
 
   switchUser(username) {
@@ -425,46 +430,40 @@ class DB {
     this.ensureUserDb();
     if (gradeLevel) {
       return this.userDb.prepare(
-        'SELECT * FROM skills WHERE grade_level = ? AND (subject = ? OR subject IS NULL) ORDER BY category, display_order'
+        'SELECT * FROM skills WHERE is_active = 1 AND grade_level = ? AND (subject = ? OR subject IS NULL) ORDER BY category, display_order'
       ).all(gradeLevel, subject);
     }
     return this.userDb.prepare(
-      'SELECT * FROM skills WHERE (subject = ? OR subject IS NULL) ORDER BY category, display_order'
+      'SELECT * FROM skills WHERE is_active = 1 AND (subject = ? OR subject IS NULL) ORDER BY category, display_order'
     ).all(subject);
   }
 
-  deleteSkillsByGrade(gradeLevel, subject) {
+  replaceSkills(skills, gradeLevel, subject) {
     this.ensureUserDb();
-
-    const transaction = this.userDb.transaction(() => {
-      // First, get the IDs of skills we're about to delete
-      const skillIds = this.userDb.prepare(
-        'SELECT id FROM skills WHERE grade_level = ? AND subject = ?'
-      ).all(gradeLevel, subject).map(row => row.id);
-
-      if (skillIds.length > 0) {
-        // Delete related assignment_history entries to avoid FK constraint
-        const placeholders = skillIds.map(() => '?').join(',');
-        this.userDb.prepare(
-          `DELETE FROM assignment_history WHERE skill_id IN (${placeholders})`
-        ).run(...skillIds);
-      }
-
-      // Now delete the skills
-      return this.userDb.prepare(
-        'DELETE FROM skills WHERE grade_level = ? AND subject = ?'
-      ).run(gradeLevel, subject);
-    });
-
-    return transaction();
+    if (!skills.length) throw new Error('No skills found; existing catalog was preserved');
+    skills.forEach(skill => validateSkill(skill, gradeLevel, subject));
+    const upsert = this.userDb.prepare(`
+      INSERT INTO skills (ixl_id, skill_code, name, category, grade_level, url, display_order, subject, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(ixl_id, subject) DO UPDATE SET skill_code=excluded.skill_code,
+        name=excluded.name, category=excluded.category, grade_level=excluded.grade_level,
+        url=excluded.url, display_order=excluded.display_order, is_active=1
+    `);
+    this.userDb.transaction(() => {
+      // Retain old rows for history and queued task references rather than deleting them.
+      this.userDb.prepare('UPDATE skills SET is_active = 0 WHERE grade_level = ? AND (subject = ? OR subject IS NULL)').run(gradeLevel, subject);
+      for (const skill of skills) upsert.run(skill.ixlId, skill.skillCode, skill.name, skill.category,
+        skill.gradeLevel, skill.url, skill.displayOrder, skill.subject || 'math');
+    })();
   }
 
   getSkillsByIds(ids) {
     this.ensureUserDb();
+    if (!ids.length) return [];
     const placeholders = ids.map(() => '?').join(',');
-    return this.userDb.prepare(
-      `SELECT * FROM skills WHERE id IN (${placeholders})`
-    ).all(...ids);
+    const rows = this.userDb.prepare(`SELECT * FROM skills WHERE id IN (${placeholders})`).all(...ids);
+    const byId = new Map(rows.map(row => [row.id, row]));
+    return ids.map(id => byId.get(id)).filter(Boolean);
   }
 
   getSkillsByRange(category, startNum, endNum) {

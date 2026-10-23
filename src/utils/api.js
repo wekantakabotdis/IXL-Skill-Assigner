@@ -81,14 +81,17 @@ export const api = {
       path += `&gradeLevel=${gradeLevel}`;
     }
     const res = await fetch(getUrl(path));
-    return res.json();
+    const result = await res.json();
+    if (res.status === 409 && result.code === 'CATALOG_MISMATCH') return [];
+    if (!res.ok) throw new Error(result.error || 'Could not load skills');
+    return result;
   },
 
-  async assignSkills(studentIds, skillIds, action = 'suggest', groupNames = []) {
+  async assignSkills(studentIds, skillIds, action = 'suggest', groupNames = [], gradeLevel, subject) {
     const res = await fetch(getUrl('/assign'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentIds, skillIds, action, groupNames })
+      body: JSON.stringify({ studentIds, skillIds, action, groupNames, gradeLevel, subject })
     });
     return res.json();
   },

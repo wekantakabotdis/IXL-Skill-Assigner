@@ -65,3 +65,8 @@ pw-*
 downloads/
 screenshots/
 videos/
+
+# Browser investigation artifacts and SQLite sidecars
+.playwright-mcp/
+*.db-wal
+*.db-shm

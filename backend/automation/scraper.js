@@ -1,3 +1,4 @@
+const { assertCatalogPage, validateSkill } = require('./skillIdentity');
 const { humanDelay, humanClick } = require('./delays');
 
 async function scrapeStudents(page) {
@@ -248,6 +249,7 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
     });
     await page.waitForTimeout(1000); // Reduced from 3000
 
+    assertCatalogPage(page.url(), gradeLevel, subject);
     console.log('Extracting skill data from page...');
     const skills = await page.evaluate(({ grade, subj }) => {
       const results = [];
@@ -361,6 +363,8 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
       return results;
     }, { grade: gradeLevel, subj: subject });
 
+    assertCatalogPage(page.url(), gradeLevel, subject);
+    skills.forEach(skill => validateSkill(skill, gradeLevel, subject));
     console.log('Found skills:', skills.length);
     if (skills.length > 0) {
       console.log('Sample skills:', skills.slice(0, 5).map(s => `${s.skillCode} - ${s.skillName}`));
@@ -375,7 +379,7 @@ async function scrapeSkills(page, gradeLevel = '8', subject = 'math') {
     return skills;
   } catch (error) {
     console.error('Error scraping skills:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -412,17 +416,18 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
     });
 
     console.log('Waiting for skill plan sections to load...');
-    await page.waitForSelector('.skill-plan-section', { timeout: 15000 }).catch(() => {
+    await page.waitForSelector('.skill-plan-section, .main-section[id^="section-"]', { timeout: 15000 }).catch(() => {
       console.log('skill-plan-section not found, waiting longer...');
     });
     await page.waitForTimeout(1000); // Reduced from 3000
 
+    assertCatalogPage(page.url(), gradeLevel, subject);
     console.log('Extracting skill data from NJSLA skill plan page...');
     const skills = await page.evaluate(({ grade, subj }) => {
       const results = [];
 
       // Find all section containers (A, B, C, D)
-      const sections = document.querySelectorAll('section.skill-plan-section');
+      const sections = document.querySelectorAll('section.skill-plan-section, .main-section[id^="section-"]');
       console.log('Found sections:', sections.length);
 
       sections.forEach((section) => {
@@ -460,40 +465,33 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
         // (each skill appears twice in the DOM — visible + hidden)
         const seenDataSkills = new Set();
 
-        // Find all skill rows in this section
-        const rows = section.querySelectorAll('tbody tr');
+        const skillLinks = section.querySelectorAll('a.skill-tree-skill-link, a.skill-link[data-skill]');
+        skillLinks.forEach((link) => {
+          const dataSkillId = link.getAttribute('data-skill') || '';
 
-        rows.forEach((row) => {
-          // Each row may have one or more skills
-          const skillLinks = row.querySelectorAll('a.skill-tree-skill-link');
+          // Skip duplicate links (responsive design renders each skill twice)
+          if (dataSkillId && seenDataSkills.has(dataSkillId)) return;
+          if (dataSkillId) seenDataSkills.add(dataSkillId);
 
-          skillLinks.forEach((link) => {
-            const dataSkillId = link.getAttribute('data-skill') || '';
+          const skillName = link.textContent?.trim() || '';
+          const skillUrl = link.href || '';
 
-            // Skip duplicate links (responsive design renders each skill twice)
-            if (dataSkillId && seenDataSkills.has(dataSkillId)) return;
-            if (dataSkillId) seenDataSkills.add(dataSkillId);
+          const finalId = dataSkillId || `njsla-${sectionName}-${skillCounter}`;
+          const skillCode = `${sectionName}.${skillCounter}`;
 
-            const skillName = link.textContent?.trim() || '';
-            const skillUrl = link.href || '';
-
-            const finalId = dataSkillId || `njsla-${sectionName}-${skillCounter}`;
-            const skillCode = `${sectionName}.${skillCounter}`;
-
-            results.push({
-              ixlId: finalId,
-              skillCode: skillCode,
-              name: skillName, // Just the name, no code prefix
-              skillName: skillName,
-              category: sectionName,
-              gradeLevel: grade,
-              url: skillUrl,
-              displayOrder: skillCounter,
-              subject: subj
-            });
-
-            skillCounter++;
+          results.push({
+            ixlId: finalId,
+            skillCode: skillCode,
+            name: skillName, // Just the name, no code prefix
+            skillName: skillName,
+            category: sectionName,
+            gradeLevel: grade,
+            url: skillUrl,
+            displayOrder: skillCounter,
+            subject: subj
           });
+
+          skillCounter++;
         });
       });
 
@@ -502,7 +500,7 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
         console.log('No sections found, trying alternative structure...');
 
         // Try looking for skill links directly
-        const allLinks = document.querySelectorAll('a.skill-tree-skill-link');
+        const allLinks = document.querySelectorAll('a.skill-tree-skill-link, a.skill-link[data-skill]');
         const seenFallback = new Set();
         let currentSection = 'A';
         let skillNum = 1;
@@ -519,7 +517,7 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
           const finalId = dataSkillId || `njsla-${currentSection}-${skillNum}`;
 
           // Check if we're in a new section by looking at parent elements
-          const sectionEl = link.closest('.skill-plan-section');
+          const sectionEl = link.closest('.skill-plan-section, .main-section[id^="section-"]');
           if (sectionEl) {
             const sectionId = sectionEl.id || '';
             const match = sectionId.match(/^section-(.+)$/);
@@ -550,6 +548,8 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
       return results;
     }, { grade: gradeLevel, subj: subject });
 
+    assertCatalogPage(page.url(), gradeLevel, subject);
+    skills.forEach(skill => validateSkill(skill, gradeLevel, subject));
     console.log('Found NJSLA skills:', skills.length);
     if (skills.length > 0) {
       console.log('Sample skills:', skills.slice(0, 5).map(s => `${s.skillCode} - ${s.skillName}`));
@@ -564,7 +564,7 @@ async function scrapeNJSLASkills(page, gradeLevel = '5', subject = 'njsla-math')
     return skills;
   } catch (error) {
     console.error('Error scraping NJSLA skills:', error);
-    return [];
+    throw error;
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { api } from './utils/api';
 import { parseRange } from './utils/skillHelpers';
 import StudentSelector from './components/StudentSelector';
@@ -95,6 +95,22 @@ export default function App() {
   const [groups, setGroups] = useState([]);
   const [skills, setSkills] = useState([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+  const skillLoadVersion = useRef(0);
+  const defaultsVersion = useRef(0);
+  const loadedCatalog = useRef(null);
+
+  const invalidateSkills = () => {
+    skillLoadVersion.current++;
+    loadedCatalog.current = null;
+    setSkills([]);
+    setSelectedSkillIds([]);
+    setIsLoadingSkills(false);
+  };
+
+  useEffect(() => () => {
+    skillLoadVersion.current++;
+    defaultsVersion.current++;
+  }, []);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [subject, setSubject] = useState(null);
@@ -288,66 +304,57 @@ export default function App() {
 
   const loadSkills = async (grade, subj, forceSync = false) => {
     if (!grade || !subj) return;
+    const version = ++skillLoadVersion.current;
+    loadedCatalog.current = null;
+    setSkills([]);
+    setSelectedSkillIds([]);
     setIsLoadingSkills(true);
-
     try {
-      showNotification('info', `Loading ${getSubjectDisplayName(subj)} Grade ${grade} skills...`);
-
-      let skillsData = [];
-      if (!forceSync) {
-        skillsData = await api.getSkills(grade, subj);
+      let skillsData = forceSync ? [] : await api.getSkills(grade, subj);
+      if (version !== skillLoadVersion.current) return;
+      if (!skillsData.length || forceSync) {
+        showNotification('info', `Syncing ${getSubjectDisplayName(subj)} Grade ${grade} skills...`);
+        const result = await api.syncSkills(grade, subj);
+        if (version !== skillLoadVersion.current) return;
+        if (!result.success || !result.skills?.length) throw new Error(result.error || 'No skills found');
+        skillsData = result.skills;
       }
-
-      if (skillsData.length === 0 || forceSync) {
-        showNotification('info', `Syncing ${getSubjectDisplayName(subj)} skills from IXL... Browser will navigate.`);
-        const syncResult = await api.syncSkills(grade, subj);
-
-        if (syncResult.skills && syncResult.skills.length > 0) {
-          const updatedSkills = await api.getSkills(grade, subj);
-          setSkills(updatedSkills);
-          showNotification('success', `Loaded ${updatedSkills.length} ${getSubjectDisplayName(subj)} skills!`);
-        } else {
-          const errorMsg = syncResult.error || `No skills found for Grade ${grade}. Check browser console for details.`;
-          showNotification('error', errorMsg);
-          setSkills([]);
-        }
-      } else {
-        setSkills(skillsData);
-        showNotification('success', `Loaded ${skillsData.length} ${getSubjectDisplayName(subj)} skills from cache.`);
+      if (version !== skillLoadVersion.current) return;
+      if (skillsData.some(skill => String(skill.grade_level ?? skill.gradeLevel) !== String(grade) || (skill.subject || 'math') !== subj)) {
+        throw new Error('Loaded skills do not match the selected grade and subject. Refresh skills.');
       }
+      loadedCatalog.current = { grade, subject: subj };
+      setSkills(skillsData);
+      showNotification('success', `Loaded ${skillsData.length} ${getSubjectDisplayName(subj)} Grade ${grade} skills.`);
     } catch (error) {
-      console.error('Error loading skills:', error);
-      showNotification('error', 'Error loading skills: ' + error.message);
+      if (version !== skillLoadVersion.current) return;
+      loadedCatalog.current = null;
       setSkills([]);
+      showNotification('error', error.message);
     } finally {
-      setIsLoadingSkills(false);
+      if (version === skillLoadVersion.current) setIsLoadingSkills(false);
     }
   };
 
   useEffect(() => {
-    const applyGroupDefaults = async () => {
-      if (selectedStudentIds.length === 0) {
-        setSubject(null);
-        setGradeLevel(null);
-        setSkills([]);
-        return;
+    const version = ++defaultsVersion.current;
+    if (!selectedStudentIds.length) {
+      setSubject(null);
+      setGradeLevel(null);
+      invalidateSkills();
+      return;
+    }
+    api.getCommonDefaults(selectedStudentIds).then(defaults => {
+      if (version !== defaultsVersion.current) return;
+      if (defaults?.subject && defaults?.gradeLevel) {
+        setSubject(defaults.subject);
+        setGradeLevel(defaults.gradeLevel);
+        loadSkills(defaults.gradeLevel, defaults.subject);
       }
-
-      try {
-        const commonDefaults = await api.getCommonDefaults(selectedStudentIds);
-
-        // Only apply if this is still the current selection count
-        // and we haven't switched to a different task
-        if (commonDefaults && commonDefaults.subject && commonDefaults.gradeLevel) {
-          setSubject(commonDefaults.subject);
-          setGradeLevel(commonDefaults.gradeLevel);
-          loadSkills(commonDefaults.gradeLevel, commonDefaults.subject);
-        }
-      } catch (error) {
-        console.error('Error fetching group defaults:', error);
-      }
-    };
-    applyGroupDefaults();
+    }).catch(error => {
+      if (version === defaultsVersion.current) console.error('Error fetching group defaults:', error);
+    });
+    return () => { defaultsVersion.current++; };
   }, [selectedStudentIds]);
 
   const handleLogin = async (e) => {
@@ -387,6 +394,8 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    defaultsVersion.current++;
+    invalidateSkills();
     try {
       showNotification('info', 'Signing out...');
       const result = await api.logout();
@@ -439,14 +448,7 @@ export default function App() {
         return;
       }
 
-      // Only load skills if subject and grade are selected
-      const skillsData = await api.getSkills(gradeLevel, subject);
-      console.log('Received skills data:', skillsData.length, 'skills');
-
-      if (skillsData.length > 0) {
-        setSkills(skillsData);
-        showNotification('success', `Loaded ${skillsData.length} skills from cache.`);
-      }
+      await loadSkills(gradeLevel, subject);
     } catch (error) {
       console.error('Error loading data:', error);
       showNotification('error', 'Error loading data: ' + error.message);
@@ -454,16 +456,20 @@ export default function App() {
   };
 
   const handleGradeChange = async (newGrade) => {
+    defaultsVersion.current++;
     setGradeLevel(newGrade);
     setSelectedSkillIds([]); // Reset skills when grade changes
     loadSkills(newGrade, subject);
   };
 
   const handleForceSync = () => {
+    defaultsVersion.current++;
     loadSkills(gradeLevel, subject, true);
   };
 
   const handleSubjectChange = async (newSubject) => {
+    defaultsVersion.current++;
+    invalidateSkills();
     setSubject(newSubject);
     setSkills([]);
     setGradeLevel(null);
@@ -480,6 +486,8 @@ export default function App() {
   };
 
   const handleStudentSelect = (ids, groupNames = []) => {
+    defaultsVersion.current++;
+    invalidateSkills();
     setSelectedStudentIds(ids);
     setSelectedGroupNames(groupNames);
   };
@@ -541,6 +549,14 @@ export default function App() {
   };
 
   const handleAssign = async () => {
+    if (isLoadingSkills || loadedCatalog.current?.grade !== gradeLevel || loadedCatalog.current?.subject !== subject) {
+      showNotification('error', 'Wait for skills matching the selected grade and subject to load.');
+      return;
+    }
+    if (selectedSkillIds.some(id => !skills.some(skill => skill.id === id && String(skill.grade_level ?? skill.gradeLevel) === String(gradeLevel) && (skill.subject || 'math') === subject))) {
+      showNotification('error', 'Selected skills are outdated. Refresh skills.');
+      return;
+    }
     if (selectedStudentIds.length === 0) {
       showNotification('error', 'Please select at least one student');
       return;
@@ -560,7 +576,7 @@ export default function App() {
     const studentIds = selectedStudentIds;
 
     try {
-      const result = await api.assignSkills(studentIds, skillIds, actionMode, selectedGroupNames);
+      const result = await api.assignSkills(studentIds, skillIds, actionMode, selectedGroupNames, gradeLevel, subject);
 
       if (result.taskId) {
         showNotification('success', `Task queued for ${studentIds.length} students and ${skillIds.length} skills.`);
@@ -585,7 +601,7 @@ export default function App() {
         setSkills([]);
         loadHistory();
       } else {
-        showNotification('error', 'Failed to start assignment');
+        showNotification('error', result.error || 'Failed to start assignment');
       }
     } catch (error) {
       showNotification('error', 'Assignment error: ' + error.message);
@@ -1045,7 +1061,7 @@ export default function App() {
 
             <button
               onClick={handleAssign}
-              disabled={selectedStudentIds.length === 0 || selectedSkillIds.length === 0}
+              disabled={isLoadingSkills || selectedStudentIds.length === 0 || selectedSkillIds.length === 0}
               className="btn-ink w-full py-5 rounded-xl font-semibold text-lg tracking-wide"
             >
               Add to Queue

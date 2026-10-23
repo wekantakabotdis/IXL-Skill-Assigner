@@ -1,6 +1,6 @@
 {
   "name": "ixl-skill-assigner",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Automated skill assignment tool for IXL",
   "main": "electron/main.js",
   "scripts": {
@@ -16,7 +16,9 @@
     "package:mac:arm64": "npm run build && electron-builder --mac --arm64 && npm run rebuild:local",
     "package:mac:all": "npm run build && electron-builder --mac --x64 --arm64 && npm run rebuild:local",
     "package:win": "npm run build && electron-builder --win && npm run rebuild:local",
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "test:browser": "node --test tests/*.browser.cjs"
   },
   "keywords": [
     "ixl",
@@ -63,16 +65,11 @@
       "!dist/*.dmg",
       "!dist/*.blockmap",
       "!dist/mac/**/*",
-      "!dist/mac-arm64/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "node_modules/playwright/.local-browsers",
-        "to": "playwright-browsers",
-        "filter": [
-          "**/*"
-        ]
-      }
+      "!dist/mac-arm64/**/*",
+      "!backend/**/*.db*",
+      "!backend/**/*.sqlite*",
+      "!backend/**/test*/**/*",
+      "!**/.playwright-mcp/**/*"
     ],
     "mac": {
       "target": [

@@ -27,6 +27,14 @@ Get the latest release from the [Releases page](https://github.com/wekantakabotd
 
 This tool automates IXL interactions and may violate their Terms of Service. Use at your own risk.
 
+## Development checks
+
+- `npm test` checks catalog validation, queued skill identity, history preservation, and cancellation with temporary databases.
+- `npm run test:browser` runs Playwright regressions against the development UI and local IXL fixtures. Google Chrome must be installed. These tests do not sign in to IXL or change real student assignments.
+- `npm run package:mac:all` builds Intel and Apple Silicon DMGs in `release/` and restores the local SQLite dependency afterward.
+
+Regular assignments require `gradeLevel` and `subject` alongside `studentIds` and `skillIds` in `POST /api/assign`. The server rejects skills outside that catalog. A cached catalog with inconsistent grade URLs returns `409 CATALOG_MISMATCH`; the UI refreshes it automatically. Catalog refreshes retain historical skill rows and assignment history.
+
 ## License
 
 MIT

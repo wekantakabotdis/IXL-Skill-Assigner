@@ -5,6 +5,7 @@ const db = require('./database/db');
 const IXLBrowser = require('./automation/browser');
 const { scrapeStudents, scrapeSkills, scrapeNJSLASkills } = require('./automation/scraper');
 const { assignMultipleSkills } = require('./automation/assigner');
+const { validateSkill, snapshotSelection } = require('./automation/skillIdentity');
 
 const app = express();
 const PORT = 3001;
@@ -16,6 +17,8 @@ const browser = new IXLBrowser();
 const assignmentQueue = [];
 const taskStatuses = new Map();
 let isProcessingQueue = false;
+let activeTask = null;
+let sessionGeneration = 0;
 
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -25,6 +28,8 @@ app.post('/api/auth/login', async (req, res) => {
     // Fallback chain: request body → saved setting → empty string (generic IXL login)
     const org = organization !== undefined ? organization : (db.getSetting('ixl_organization') || '');
 
+    sessionGeneration++;
+    cancelAssignments();
     const result = await browser.login(username, password, headless, org);
 
     console.log('Browser login returned:', result);
@@ -149,23 +154,13 @@ app.post('/api/auth/logout', async (req, res) => {
   try {
     console.log('Logout API called');
 
-    // 1. Abort any active tasks first
-    abortRequested = true;
-    assignmentQueue.length = 0;
-    for (const [taskId, task] of taskStatuses.entries()) {
-      if (task.status === 'processing' || task.status === 'queued') {
-        task.status = 'aborted';
-      }
-    }
-
+    sessionGeneration++;
+    cancelAssignments();
     // 2. Close browser safely
     await browser.close();
 
     // 3. Close database entry
     db.logout();
-
-    // 4. Reset abort flag
-    setTimeout(() => { abortRequested = false; }, 500);
 
     res.json({ success: true });
   } catch (error) {
@@ -180,8 +175,9 @@ app.post('/api/sync/students', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const page = browser.getPage();
-    const result = await scrapeStudents(page);
+    const generation = sessionGeneration;
+    const result = await browser.withPage(page => scrapeStudents(page));
+    if (generation !== sessionGeneration) throw new Error('Session changed during sync');
 
     console.log('Scraped students:', result.students.length);
     console.log('Has classes:', result.hasClasses);
@@ -317,25 +313,13 @@ app.post('/api/sync/skills', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const page = browser.getPage();
-
-    // Use skill plan scraper for NJSLA and NJGPA subjects, regular scraper otherwise
-    let skills;
-    if (subject.startsWith('njsla-') || subject.startsWith('njgpa-')) {
-      skills = await scrapeNJSLASkills(page, gradeLevel, subject);
-    } else {
-      skills = await scrapeSkills(page, gradeLevel, subject);
-    }
-
-    if (skills.length > 0) {
-      console.log(`Deleting existing skills for grade ${gradeLevel}, subject ${subject}...`);
-      const deleteResult = db.deleteSkillsByGrade(gradeLevel, subject);
-      console.log(`Deleted ${deleteResult.changes} existing skills`);
-
-      console.log(`Inserting ${skills.length} new skills...`);
-      db.updateSkills(skills);
-      console.log('Skills saved to database');
-    }
+    const generation = sessionGeneration;
+    const skills = await browser.withPage(page =>
+      subject.startsWith('njsla-') || subject.startsWith('njgpa-')
+        ? scrapeNJSLASkills(page, gradeLevel, subject)
+        : scrapeSkills(page, gradeLevel, subject));
+    if (generation !== sessionGeneration) throw new Error('Session changed during sync');
+    db.replaceSkills(skills, gradeLevel, subject);
 
     // Return the updated list of skills from the database (with IDs)
     const updatedSkills = db.getSkills(gradeLevel, subject);
@@ -370,6 +354,11 @@ app.get('/api/skills', (req, res) => {
   try {
     const { gradeLevel, subject = 'math' } = req.query;
     const skills = db.getSkills(gradeLevel, subject);
+    try {
+      skills.forEach(skill => validateSkill(skill, gradeLevel || skill.grade_level, subject));
+    } catch (error) {
+      return res.status(409).json({ code: 'CATALOG_MISMATCH', error: error.message });
+    }
     res.json(skills);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -378,9 +367,9 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/assign', async (req, res) => {
   try {
-    const { studentIds, skillIds, action = 'suggest', groupName = null, groupNames = [] } = req.body;
+    const { studentIds, skillIds, action = 'suggest', groupName = null, groupNames = [], gradeLevel, subject } = req.body;
 
-    if (!studentIds || studentIds.length === 0 || !skillIds || skillIds.length === 0) {
+    if (!Array.isArray(studentIds) || studentIds.length === 0 || !Array.isArray(skillIds) || skillIds.length === 0) {
       return res.status(400).json({
         error: 'studentIds and skillIds are required'
       });
@@ -388,6 +377,15 @@ app.post('/api/assign', async (req, res) => {
 
     if (!browser.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    let selectedSkills;
+    try {
+      selectedSkills = snapshotSelection(db.getSkillsByIds(skillIds), skillIds, gradeLevel, subject);
+      if (studentIds.some(id => !db.getStudent(id))) throw new Error('Selected student no longer exists');
+      if (!['suggest', 'stop_suggesting'].includes(action)) throw new Error('Invalid assignment action');
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
     }
 
     const allGroups = db.getGroups();
@@ -413,6 +411,11 @@ app.post('/api/assign', async (req, res) => {
       id: taskId,
       studentIds,
       skillIds,
+      skills: selectedSkills,
+      gradeLevel,
+      subject,
+      sessionGeneration,
+      cancelled: false,
       action,
       groupName,
       groupNames: actualGroupNames,
@@ -468,7 +471,7 @@ app.get('/api/history', (req, res) => {
 app.get('/api/queue', (req, res) => {
   try {
     const queueWithDetails = assignmentQueue.map(task => {
-      const skills = db.getSkillsByIds(task.skillIds);
+      const skills = task.skills;
       return {
         ...task,
         skillCodes: skills.map(s => {
@@ -496,37 +499,23 @@ app.get('/api/queue', (req, res) => {
   }
 });
 
-// Abort all tasks
-let abortRequested = false;
-
-app.post('/api/abort', (req, res) => {
-  try {
-    abortRequested = true;
-
-    // Clear the queue
-    const queuedCount = assignmentQueue.length;
-    assignmentQueue.length = 0;
-
-    // Mark any processing tasks as aborted
-    for (const [taskId, task] of taskStatuses.entries()) {
-      if (task.status === 'processing' || task.status === 'queued') {
-        task.status = 'aborted';
-        task.error = 'Aborted by user';
-      }
+function cancelAssignments() {
+  if (activeTask) activeTask.cancelled = true;
+  assignmentQueue.length = 0;
+  for (const task of taskStatuses.values()) {
+    if (task.status === 'processing' || task.status === 'queued') {
+      task.cancelled = true;
+      task.status = 'aborted';
+      task.error = 'Aborted by user';
     }
-
-    res.json({
-      success: true,
-      message: `Aborted. Cleared ${queuedCount} queued tasks.`
-    });
-
-    // Reset abort flag after a short delay to allow current operation to complete
-    setTimeout(() => {
-      abortRequested = false;
-    }, 1000);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
+}
+
+app.post('/api/abort', async (req, res) => {
+  const queuedCount = assignmentQueue.length;
+  cancelAssignments();
+  await browser.closeOperationPages();
+  res.json({ success: true, message: `Aborted. Cleared ${queuedCount} queued tasks.` });
 });
 
 async function processQueue() {
@@ -536,12 +525,14 @@ async function processQueue() {
 
   isProcessingQueue = true;
 
-  while (assignmentQueue.length > 0 && !abortRequested) {
+  while (assignmentQueue.length > 0) {
     const task = assignmentQueue.shift();
+    activeTask = task;
+    const isCancelled = () => task.cancelled || task.sessionGeneration !== sessionGeneration;
     taskStatuses.set(task.id, { ...task, status: 'processing' });
 
     // Check if abort was requested before starting
-    if (abortRequested) {
+    if (isCancelled()) {
       taskStatuses.set(task.id, {
         ...task,
         status: 'aborted',
@@ -556,7 +547,7 @@ async function processQueue() {
         throw new Error('No valid students found');
       }
 
-      const skills = db.getSkillsByIds(task.skillIds);
+      const skills = task.skills;
       if (skills.length === 0) {
         throw new Error('No valid skills found');
       }
@@ -578,6 +569,8 @@ async function processQueue() {
         if (!code) return null;
 
         return {
+          id: s.id,
+          url: s.url,
           skillCode: code,
           dataSkillId: s.ixl_id,
           skillName: s.name || s.skillName || s.skill_name,
@@ -589,9 +582,7 @@ async function processQueue() {
         throw new Error('No skill codes could be extracted');
       }
 
-      const gradeLevel = skills[0].grade_level || skills[0].gradeLevel;
-      const subject = skills[0].subject || 'math';
-      const page = browser.getPage();
+      const { gradeLevel, subject } = task;
 
       // Check if this account has IXL classes
       const hasClassesSetting = db.getSetting('has_ixl_classes');
@@ -626,7 +617,7 @@ async function processQueue() {
       console.log(`- Classes: ${targets.classes.join(', ') || 'None'}`);
       console.log(`- Individual Students: ${targets.students.join(', ') || 'None'}`);
 
-      const results = await assignMultipleSkills(
+      const results = await browser.withPage(page => assignMultipleSkills(
         page,
         skillsData,
         gradeLevel,
@@ -640,17 +631,18 @@ async function processQueue() {
           });
         },
         subject,
-        () => abortRequested,
+        isCancelled,
         hasClasses,
         targets
-      );
+      ));
+      if (isCancelled()) throw new Error('Assignment aborted');
 
       // Generate a batch ID for this assignment task
       const batchId = uuidv4();
 
       // Record history
       results.forEach((result) => {
-        const skill = skills.find(sk => (sk.skill_code || sk.skillCode) === result.skillCode);
+        const skill = skills.find(sk => sk.id === result.skillId && sk.ixl_id === result.dataSkillId);
 
         if (skill) {
           if (result.isClass) {
@@ -708,7 +700,7 @@ async function processQueue() {
 
       taskStatuses.set(task.id, {
         ...task,
-        status: 'completed',
+        status: results.some(result => !result.success) ? 'failed' : 'completed',
         progress: task.total,
         results
       });
@@ -716,12 +708,13 @@ async function processQueue() {
     } catch (error) {
       taskStatuses.set(task.id, {
         ...task,
-        status: 'failed',
+        status: isCancelled() ? 'aborted' : 'failed',
         error: error.message
       });
     }
   }
 
+  activeTask = null;
   isProcessingQueue = false;
 }
 
@@ -745,7 +738,7 @@ const startServer = (port) => {
   return server;
 };
 
-const server = startServer(PORT);
+if (process.env.IXL_NO_LISTEN !== '1') startServer(Number(process.env.PORT) || PORT);
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
@@ -755,3 +748,4 @@ process.on('SIGINT', async () => {
 });
 
 module.exports = app;
+module.exports.browser = browser;

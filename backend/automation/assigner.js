@@ -1,4 +1,10 @@
-const { humanDelay } = require('./delays');
+const { catalogUrl, canonicalUrl, assertCatalogPage, validateSkill, isPlanSubject } = require('./skillIdentity');
+
+async function waitForSkills(page, isPlanBased) {
+  const selector = isPlanBased ? 'a.skill-tree-skill-link, a.skill-link[data-skill]' : 'a.skill-tree-skill-link';
+  await page.waitForFunction(selector => [...document.querySelectorAll(selector)]
+    .some(link => link.getClientRects().length && getComputedStyle(link).visibility !== 'hidden'), selector, { timeout: 15000 });
+}
 
 /**
  * Select a class in the dropdown (for accounts with classes)
@@ -41,6 +47,7 @@ async function selectClassInDropdown(page, className, action = 'suggest') {
         await starInRow.click();
         await page.waitForTimeout(300);
       }
+      await verifyStarState(page, starInRow, action);
       return [{ studentName: className, success: true, isClass: true }];
     }
   }
@@ -58,6 +65,15 @@ async function getStarState(starElement) {
     if (el.classList.contains('half-suggested')) return 'half-suggested';
     return 'not-suggested';
   });
+}
+
+async function verifyStarState(page, star, action) {
+  const expected = action === 'suggest' ? 'suggested' : 'not-suggested';
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (await getStarState(star) === expected) return;
+    await page.waitForTimeout(200);
+  }
+  throw new Error('IXL did not confirm the requested suggestion state');
 }
 
 /**
@@ -107,7 +123,9 @@ async function selectStudentsInDropdown(page, studentNames, action = 'suggest', 
     if (remainingStudents.length === 0) break;
 
     for (const name of remainingStudents) {
-      const studentRow = page.locator('li.entry-row').filter({ hasText: name }).first();
+      const matchingRows = page.locator('li.entry-row').filter({ has: page.getByText(name, { exact: true }) });
+      if (await matchingRows.count() > 1) throw new Error(`Multiple students named ${name}; cannot safely select a target`);
+      const studentRow = matchingRows.first();
       if (await studentRow.isVisible()) {
         console.log(`Found "${name}", checking star state...`);
         const starInRow = studentRow.locator('.suggestion-toggle-icon').first();
@@ -131,11 +149,10 @@ async function selectStudentsInDropdown(page, studentNames, action = 'suggest', 
             await starInRow.click();
             await page.waitForTimeout(200);
           }
+          await verifyStarState(page, starInRow, action);
           results.push({ studentName: name, success: true });
         } else {
-          console.log(`Star not found for "${name}", clicking row...`);
-          await studentRow.click();
-          results.push({ studentName: name, success: true });
+          throw new Error(`Suggestion control not found for ${name}`);
         }
         foundStudents.add(name);
       }
@@ -172,15 +189,22 @@ async function checkDropdownVisible(page) {
   return visible;
 }
 
-async function getSuggestionIcon(skillNode) {
-  let suggestionIcon = skillNode.locator('.suggestion-toggle-icon').first();
-  if (!await suggestionIcon.count()) {
-    suggestionIcon = skillNode.locator('xpath=ancestor::*[contains(@class, "skill-tree-skill")]//span[contains(@class, "suggestion-toggle-icon")]').first();
+async function getSuggestionIcon(skillNode, dataSkillId) {
+  const icons = skillNode.locator('.suggestion-toggle-icon');
+  if (await icons.count() === 1) {
+    const icon = icons.first();
+    const id = await icon.getAttribute('data-skill');
+    if (!id || id === dataSkillId) return icon;
   }
-  if (!await suggestionIcon.count()) {
-    suggestionIcon = skillNode.locator('xpath=ancestor::tr//*[contains(@class, "suggestion")]').first();
+  const visible = [];
+  for (const icon of await icons.all()) {
+    if (!await icon.isVisible()) continue;
+    const id = await icon.getAttribute('data-skill');
+    if (id === dataSkillId) return icon;
+    if (!id) visible.push(icon);
   }
-  return suggestionIcon;
+  if (visible.length === 1) return visible[0];
+  throw new Error('No unambiguous suggestion control for the requested skill');
 }
 
 async function assignSkill(page, skillData, action = 'suggest', isPlanBased = false, hasClasses = false, targets = { classes: [], students: [] }) {
@@ -188,93 +212,38 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
   console.log(`Processing skill ${skillCode}...`);
 
   try {
-    let skillNode;
-    if (isPlanBased) {
-      const [sectionLetter, skillNum] = skillCode.split('.');
-      let sectionName = sectionLetter === 'R' ? 'Reading' : sectionLetter === 'W' ? 'Writing' : sectionLetter;
-
-      const section = page.locator(`section#section-${sectionName}, section.skill-plan-section`).filter({
-        has: page.locator(`.skill-plan-section-description, .skill-plan-section-name, .skill-plan-section-header`).filter({
-          hasText: new RegExp(`(Sub-Claim ${sectionLetter}|${sectionName})`, 'i')
-        })
-      }).first();
-
-      if (dataSkillId && !dataSkillId.startsWith('njsla-')) {
-        skillNode = page.locator(`a.skill-tree-skill-link[data-skill="${dataSkillId}"]`).first();
+    validateSkill(skillData, skillData.gradeLevel, skillData.subject);
+    const verifyIdentity = async () => {
+      assertCatalogPage(page.url(), skillData.gradeLevel, skillData.subject);
+      const links = page.locator(isPlanBased ? 'a.skill-tree-skill-link, a.skill-link[data-skill]' : 'a.skill-tree-skill-link');
+      const candidates = await links.evaluateAll((elements, expected) => elements
+        .map((el, index) => ({ index, id: el.getAttribute('data-skill'), url: el.href }))
+        .filter(link => link.url.split(/[?#]/)[0].replace(/\/$/, '') === expected.url &&
+          (expected.synthetic || link.id === expected.id)), {
+          id: dataSkillId,
+          url: canonicalUrl(skillData.url),
+          synthetic: isPlanBased && dataSkillId.startsWith('njsla-')
+        });
+      if (!candidates.length) throw new Error(`Skill identity mismatch for ${skillCode}. Refresh skills and retry.`);
+      let link;
+      for (const candidate of candidates) {
+        const match = links.nth(candidate.index);
+        if (await match.isVisible()) { link = match; break; }
       }
-
-      if (!skillNode || !await skillNode.count()) {
-        const nameToFind = skillData.skillName;
-        console.log(`Matching NJSLA skill by name "${nameToFind}"...`);
-        skillNode = section.locator('a.skill-tree-skill-link').filter({ hasText: nameToFind }).first();
+      if (!link) throw new Error(`No visible skill link for ${skillCode}`);
+      // The enclosing row owns this skill's suggestion control, including responsive plan rows.
+      const skillNode = link.locator('xpath=ancestor::*[self::li or self::tr or contains(concat(" ", normalize-space(@class), " "), " skill-node ")][1]');
+      const actual = await link.evaluate(el => ({ id: el.getAttribute('data-skill'), url: el.href }));
+      const icon = await getSuggestionIcon(skillNode, actual.id);
+      if ((!isPlanBased || !dataSkillId.startsWith('njsla-')) && actual.id !== dataSkillId) {
+        throw new Error(`Skill identity changed for ${skillCode}`);
       }
-
-      if (!skillNode || !await skillNode.count()) {
-        const allSkillsInSec = await section.locator('a.skill-tree-skill-link').all();
-        skillNode = allSkillsInSec[parseInt(skillNum, 10) - 1];
-      }
-    } else {
-      const [cat, num] = skillCode.split('.');
-      const isNew = skillCode.includes('new');
-
-      // Wait for skill nodes to appear on the page
-      await page.waitForSelector('li.skill-tree-skill-node', { timeout: 10000 });
-
-      // Find the Category Section by looking for the category-code span with "A." etc.
-      const categoryCodeSpan = page.locator(`span.category-code`).filter({ hasText: new RegExp(`^\\s*${cat}\\.\\s*$`) }).first();
-
-      if (!await categoryCodeSpan.count()) {
-        throw new Error(`Category "${cat}" not found on page`);
-      }
-
-      // Navigate to the parent skill-tree-skills-header, then to the sibling ol with skills
-      const catSec = categoryCodeSpan.locator('xpath=ancestor::div[contains(@class, "skill-tree-skills-header")]/following-sibling::ol').first();
-
-      if (!await catSec.count()) {
-        throw new Error(`Skill list for category "${cat}" not found`);
-      }
-
-      console.log(`Found category section for "${cat}"`);
-
-      if (!isNew && !isNaN(parseInt(num, 10))) {
-        // Match by skill number
-        skillNode = catSec.locator('li.skill-tree-skill-node').filter({
-          has: page.locator(`span.skill-tree-skill-number`).filter({ hasText: new RegExp(`^\\s*${num}\\s*$`) })
-        }).first();
-      } else {
-        // For "new" skills: Match by skill name
-        const nameToFind = skillData.skillName || skillData.skillNameClean;
-        console.log(`Matching skill by name "${nameToFind}" within category "${cat}"...`);
-        skillNode = catSec.locator('li.skill-tree-skill-node').filter({
-          hasText: new RegExp(`(^|\\s)${nameToFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'i')
-        }).first();
-      }
-    }
-
-    if (!skillNode || !await skillNode.count()) throw new Error(`Skill ${skillCode} not found`);
-
+      if (canonicalUrl(actual.url) !== canonicalUrl(skillData.url)) throw new Error(`Skill URL changed for ${skillCode}`);
+      return { skillNode, icon };
+    };
+    await waitForSkills(page, isPlanBased);
+    const { skillNode, icon } = await verifyIdentity();
     await skillNode.scrollIntoViewIfNeeded();
-    const icon = await getSuggestionIcon(skillNode);
-    if (!await icon.count()) throw new Error(`Icon not found for ${skillCode}`);
-
-    // Pre-check: skip if the main skill star is already in the desired state
-    const mainStarState = await getStarState(icon);
-    console.log(`Main star state for ${skillCode}: ${mainStarState}`);
-
-    if (action === 'suggest' && mainStarState === 'suggested') {
-      console.log(`Skill ${skillCode} already fully suggested — skipping entirely`);
-      const skipResults = [];
-      if (targets.classes) targets.classes.forEach(c => skipResults.push({ studentName: c, isClass: true, skillCode, success: true, skipped: true }));
-      if (targets.students) targets.students.forEach(s => skipResults.push({ studentName: s, skillCode, success: true, skipped: true }));
-      return skipResults;
-    }
-    if (action === 'stop_suggesting' && mainStarState === 'not-suggested') {
-      console.log(`Skill ${skillCode} already not suggested — skipping entirely`);
-      const skipResults = [];
-      if (targets.classes) targets.classes.forEach(c => skipResults.push({ studentName: c, isClass: true, skillCode, success: true, skipped: true }));
-      if (targets.students) targets.students.forEach(s => skipResults.push({ studentName: s, skillCode, success: true, skipped: true }));
-      return skipResults;
-    }
 
     await icon.hover();
     const visible = await checkDropdownVisible(page);
@@ -289,6 +258,7 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
     if (hasClasses && targets.classes && targets.classes.length > 0) {
       for (const className of targets.classes) {
         console.log(`Assigning to IXL class "${className}"...`);
+        await verifyIdentity();
         const res = await selectClassInDropdown(page, className, action);
         results.push(...res);
       }
@@ -297,6 +267,7 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
     // 2. Assign to individual students
     if (targets.students && targets.students.length > 0) {
       console.log(`Assigning to individual students...`);
+      await verifyIdentity();
       const res = await selectStudentsInDropdown(page, targets.students, action, hasClasses);
       results.push(...res);
     }
@@ -304,7 +275,7 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
 
-    return results.map(r => ({ ...r, skillCode, success: r.success, error: r.error }));
+    return results.map(r => ({ ...r, skillId: skillData.id, dataSkillId, skillUrl: skillData.url, skillCode, success: r.success, error: r.error }));
   } catch (err) {
     console.error(`Error for ${skillCode}: ${err.message}`);
     await page.keyboard.press('Escape').catch(() => { });
@@ -312,10 +283,10 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
     // Create failure results for all targets
     const failedResults = [];
     if (targets.classes) {
-      targets.classes.forEach(c => failedResults.push({ studentName: c, isClass: true, skillCode, success: false, error: err.message }));
+      targets.classes.forEach(c => failedResults.push({ studentName: c, isClass: true, skillId: skillData.id, dataSkillId, skillCode, success: false, error: err.message }));
     }
     if (targets.students) {
-      targets.students.forEach(s => failedResults.push({ studentName: s, skillCode, success: false, error: err.message }));
+      targets.students.forEach(s => failedResults.push({ studentName: s, skillId: skillData.id, dataSkillId, skillCode, success: false, error: err.message }));
     }
     return failedResults;
   }
@@ -323,29 +294,12 @@ async function assignSkill(page, skillData, action = 'suggest', isPlanBased = fa
 
 async function assignMultipleSkills(page, skillsData, gradeLevel, action = 'suggest', progressCallback, subject = 'math', abortChecker = null, hasClasses = false, targets = { classes: [], students: [] }) {
   const allResults = [];
-  const isPlanBased = subject.startsWith('njsla-') || subject.startsWith('njgpa-');
-
-  let pageUrl;
-  if (isPlanBased) {
-    let baseSub = 'math';
-    if (subject.includes('ela')) baseSub = 'ela';
-    if (subject.includes('science')) baseSub = 'science';
-
-    if (subject.startsWith('njgpa-')) {
-      const urlPath = subject === 'njgpa-ela' ? 'njgpa-english-language-arts' : 'njgpa-math';
-      pageUrl = `https://www.ixl.com/${baseSub}/skill-plans/${urlPath}`;
-    } else {
-      const urlPath = ['algebra-1', 'geometry', 'algebra-2'].includes(gradeLevel) ? `njsla-${gradeLevel}` : `njsla-grade-${gradeLevel}`;
-      pageUrl = `https://www.ixl.com/${baseSub}/skill-plans/${urlPath}`;
-    }
-  } else {
-    const gradeUrlMap = { 'pre-k': 'preschool', 'kindergarten': 'kindergarten' };
-    pageUrl = `https://www.ixl.com/${subject}/grade-${gradeUrlMap[gradeLevel] || gradeLevel}`;
-  }
-
+  const isPlanBased = isPlanSubject(subject);
+  const pageUrl = catalogUrl(gradeLevel, subject);
   console.log(`Navigating to ${pageUrl}`);
   await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(1500); // Reduced from 3000
+  await waitForSkills(page, isPlanBased);
+  assertCatalogPage(page.url(), gradeLevel, subject);
 
   for (let i = 0; i < skillsData.length; i++) {
     if (abortChecker && abortChecker()) break;
@@ -353,7 +307,7 @@ async function assignMultipleSkills(page, skillsData, gradeLevel, action = 'sugg
     const displayName = isPlanBased ? (skill.skillName || skill.skillCode) : skill.skillCode;
     if (progressCallback) progressCallback({ current: i, total: skillsData.length, currentSkill: displayName });
 
-    const result = await assignSkill(page, skill, action, isPlanBased, hasClasses, targets);
+    const result = await assignSkill(page, { ...skill, gradeLevel, subject }, action, isPlanBased, hasClasses, targets);
     allResults.push(...result);
 
     if (i < skillsData.length - 1) await page.waitForTimeout(100); // Fixed 100ms instead of humanDelay
